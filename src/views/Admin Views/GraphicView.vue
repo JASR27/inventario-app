@@ -2,8 +2,8 @@
     <div class="dashboard-graficos">
         <Sidebar />
 
-        <HorizontalBarChart :labels="['Zapatos', 'Sandalias', 'Botines']" :valores="[120, 80, 45]"
-            titulo="Inventario por categoría" />
+        <HorizontalBarChart :labels="['Samuel Millan', 'Jorge Sayegh', 'Feysmar Perez']" :valores="[120, 80, 45]"
+            titulo="Mayores vendedores" />
 
         
     </div>

@@ -2,9 +2,11 @@
   <div class="login-container">
     <h1>Iniciar sesión</h1>
     <form @submit.prevent="login">
-      <input v-model="usuario" placeholder="Usuario" required />
-      <input v-model="clave" type="password" placeholder="Contraseña" required />
-      <button type="submit">Entrar</button>
+      <input v-model="usuario" placeholder="Usuario" :disabled="cargando" required />
+      <input v-model="clave" type="password" placeholder="Contraseña" :disabled="cargando" required />
+      <button type="submit" :disabled="cargando">
+        {{ cargando ? 'Verificando...' : 'Entrar' }}
+      </button>
     </form>
   </div>
 </template>
@@ -15,6 +17,7 @@ import { useRouter } from 'vue-router'
 
 const usuario = ref('')
 const clave = ref('')
+const cargando = ref(false) // Estado para deshabilitar el botón mientras carga
 const router = useRouter()
 
 function setCookie(nombre, valor, dias = 1) {
@@ -23,51 +26,69 @@ function setCookie(nombre, valor, dias = 1) {
   document.cookie = `${nombre}=${valor};expires=${fecha.toUTCString()};path=/`
 }
 
-function login() {
-  const usuarios = {
-    admin: { clave: '1234', rol: 'admin', nombre: 'Administrador General' },
-    empleado: { clave: '5678', rol: 'empleado', nombre: 'Jorge Sayegh' },
-    coqui: { clave: '5678', rol: 'empleado', nombre: 'Coqui José' },
-  }
+async function login() {
+  cargando.value = true
+  
+  try {
+    const respuesta = await fetch('http://localhost:8080/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username: usuario.value,
+        password: clave.value
+      })
+    })
 
-  const user = usuarios[usuario.value]
+    if (respuesta.status === 200) {
+      // El backend responde con el ID del usuario como texto plano
+      const userId = await respuesta.text()
 
-  if (user && user.clave === clave.value) {
-    // Guardar en localStorage
-    localStorage.setItem('autenticado', 'true')
-    localStorage.setItem('rol', user.rol)
+      // Guardar sesión
+      localStorage.setItem('autenticado', 'true')
+      setCookie('autenticado', 'true')
+      setCookie('userid', userId)
+      setCookie('username', usuario.value)
 
-    // Guardar en cookies
-    setCookie('autenticado', 'true')
-    setCookie('rol', user.rol)
-    setCookie('usuario', user.nombre)       // nombre completo
-    setCookie('username', usuario.value)    // username técnico
+      // Nota: Como el backend solo devuelve el ID, aquí podrías 
+      // decidir el rol basándote en el ID o hacer otra petición.
+      // Por ahora, simularemos que el ID "1" es el admin.
+      if (userId === '1') {
+        localStorage.setItem('rol', 'admin')
+        router.push('/dashboard/admin')
+      } else {
+        localStorage.setItem('rol', 'empleado')
+        router.push('/dashboard/empleado')
+      }
 
-    // Redirigir según rol
-    if (user.rol === 'admin') {
-      router.push('/dashboard/admin')
+    } else if (respuesta.status === 409) {
+      alert('Credenciales incorrectas: El usuario no existe o la contraseña es errónea.')
     } else {
-      router.push('/dashboard/empleado')
+      alert('Error en el servidor. Inténtelo más tarde.')
     }
-  } else {
-    alert('Credenciales incorrectas')
+  } catch (error) {
+    console.error('Error de conexión:', error)
+    alert('No se pudo conectar con el servidor. ¿Está encendido el backend?')
+  } finally {
+    cargando.value = false
   }
 }
 </script>
 
-
 <style scoped>
+/* Mantengo tus estilos originales que están excelentes */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
 .login-container {
   max-width: 320px;
   margin: auto;
   padding: 2rem;
-  background-color: #f0fdf4; /* Fondo claro institucional */
-  color: #065f46; /* Texto verde institucional */
+  background-color: #f0fdf4;
+  color: #065f46;
   font-family: 'Inter', sans-serif;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Sombra suave */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -77,7 +98,7 @@ function login() {
 .login-container h1 {
   font-size: 1.5rem;
   margin-bottom: 1.5rem;
-  color: #166534; /* Verde profundo */
+  color: #166534;
 }
 
 form {
@@ -91,22 +112,18 @@ input {
   margin: 0.75rem 0;
   padding: 0.75rem;
   width: 90%;
-  border: 1px solid #a7f3d0; /* Borde verde suave */
+  border: 1px solid #a7f3d0;
   border-radius: 8px;
   background-color: #fff;
-  color: #1e293b; /* Texto oscuro */
+  color: #1e293b;
   font-size: 1rem;
   font-family: 'Inter', sans-serif;
   transition: border-color 0.3s ease;
 }
 
-input::placeholder {
-  color: #4b5563;
-}
-
-input:focus {
-  outline: none;
-  border-color: #34d399; /* Verde brillante al enfocar */
+input:disabled {
+  background-color: #e2e8f0;
+  cursor: not-allowed;
 }
 
 button {
@@ -118,30 +135,18 @@ button {
   cursor: pointer;
   font-family: 'Inter', sans-serif;
   transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-/* Botón principal (submit) */
-button[type="submit"],
-button:not([type]) {
   background-color: #10b981;
   color: white;
 }
 
-button[type="submit"]:hover,
-button:not([type]):hover {
+button:hover:not(:disabled) {
   background-color: #059669;
   transform: translateY(-2px);
 }
 
-/* Botón secundario (limpiar, alternar, etc.) */
-button[type="button"] {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-button[type="button"]:hover {
+button:disabled {
   background-color: #a7f3d0;
-  transform: translateY(-2px);
+  cursor: not-allowed;
 }
 </style>
 

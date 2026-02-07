@@ -6,7 +6,6 @@
         <ul v-if="activo === 'Gestionar Usuarios'" class="submenu">
           <li><router-link to="/dashboard/admin/createUser">Agregar usuario</router-link></li>
           <li><router-link to="/dashboard/admin/editUser">Modificar usuario</router-link></li>
-          <li><router-link to="/dashboard/admin/deleteUser">Eliminar usuario</router-link></li>
         </ul>
       </li>
 
@@ -29,8 +28,9 @@
       <li @click="toggle('Gestionar Registros')">
         Gestionar Registros
         <ul v-if="activo === 'Gestionar Registros'" class="submenu">
-          <li><router-link to="/dashboard/empleado/productos">Gestionar inventario</router-link></li>
-          <li><router-link to="/dashboard/empleado/stock">Gestionar transacciones</router-link></li>
+          <li><router-link to="/dashboard/admin/inventory">Gestionar inventario</router-link></li>
+          <li><router-link to="/dashboard/admin/transactions">Gestionar transacciones</router-link></li>
+          <li><router-link to="/dashboard/admin/adjustment">Registrar ajuste de inventario</router-link></li>
         </ul>
       </li>
 

@@ -5,8 +5,6 @@
     <table class="tabla-pagos">
       <thead>
         <tr>
-          <th>ID Pago</th>
-          <th>ID Pagador</th>
           <th>Método</th>
           <th>Monto</th>
           <th>Acciones</th>
@@ -14,10 +12,8 @@
       </thead>
       <tbody>
         <tr v-for="(pago, index) in pagos" :key="pago.idPago">
-          <td>{{ pago.idPago }}</td>
-          <td>{{ pago.idPagador }}</td>
-          <td>{{ pago.metodo }}</td>
-          <td>{{ formato(pago.monto) }}</td>
+          <td>{{ pago.method }}</td>
+          <td>{{ formato(pago.amount) }}</td>
           <td>
             <button class="eliminar" @click="$emit('eliminar', index)">Eliminar</button>
           </td>
@@ -37,9 +33,10 @@ const props = defineProps({
 })
 
 function formato(valor) {
-  return 'Bs ' + valor.toFixed(2)
+  return valor.toFixed(2) + ' Bs.'
 }
 </script>
+
 
 <style scoped>
 .modal-panel {
@@ -62,13 +59,13 @@ h2 {
   text-align: center;
 }
 
-.tabla-pagos {
+table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.95rem;
   background-color: #fff;
   border-radius: 8px;
   overflow: hidden;
-  font-size: 0.95rem;
 }
 
 thead {
@@ -91,37 +88,43 @@ td:last-child {
 
 tr:hover {
   background-color: #ecfdf5;
+  cursor: pointer;
 }
 
-button {
-    padding: 0.75rem 1.25rem;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: "Inter", sans-serif;
-    transition: background-color 0.3s ease;
-    min-width: 140px;
-    /* ← ancho uniforme */
-    text-align: center;
+.eliminar {
+  background-color: #e5e7eb;
+  color: #374151;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.eliminar:hover {
+  background-color: #d1d5db;
 }
 
 .button-group {
   display: flex;
   justify-content: flex-end;
+  gap: 1rem;
 }
 
-.eliminar {
-  background-color: #10b981;
-  color: white;
+button[type="button"] {
+  padding: 0.75rem 1.25rem;
   border: none;
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 0.9rem;
 }
 
-.eliminar:hover {
-  background-color: #059669;
+button[type="button"]:first-child {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+button[type="button"]:first-child:hover {
+  background-color: #d1d5db;
 }
 </style>

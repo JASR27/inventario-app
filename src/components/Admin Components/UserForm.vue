@@ -5,27 +5,34 @@
       <div class="form-grid">
         <div class="form-group">
           <label for="firstName">Primer Nombre:</label>
-          <input type="text" id="firstName" v-model="user.firstName" required />
+          <input type="text" id="firstName" v-model="user.firstName" required minlength="4" maxlength="20"
+            pattern="[A-Za-z ]{4,20}" title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios" />
         </div>
 
         <div class="form-group">
           <label for="lastName">Primer Apellido:</label>
-          <input type="text" id="lastName" v-model="user.lastName" required />
+          <input type="text" id="lastName" v-model="user.lastName" required minlength="4" maxlength="20"
+            pattern="[A-Za-z ]{4,20}" title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios" />
         </div>
 
         <div class="form-group">
           <label for="nid">NID:</label>
-          <input type="text" id="nid" v-model="user.nid" required />
+          <input type="text" id="nid" v-model="user.nid" required minlength="6" maxlength="20"
+            pattern="[A-Za-z0-9._-]{6,20}"
+            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
         </div>
 
         <div class="form-group">
           <label for="username">Usuario:</label>
-          <input type="text" id="username" v-model="user.username" required />
+          <input type="text" id="username" v-model="user.username" required minlength="6" maxlength="20"
+            pattern="[A-Za-z0-9._-]{6,20}" title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
         </div>
 
         <div class="form-group">
           <label for="password">Contraseña:</label>
-          <input type="password" id="password" v-model="user.password" required />
+          <input type="password" id="password" v-model="user.password" required minlength="6" maxlength="20"
+            pattern="[A-Za-z0-9._\-#$&*@]{6,20}"
+            title="Debe tener entre 6 y 20 caracteres. Se permiten letras, números y .-_ $#&*@" />
         </div>
 
         <div class="form-group">
@@ -63,9 +70,58 @@ export default {
   },
   methods: {
     handleSubmit() {
-      console.log("Datos del usuario:", this.user);
-      alert(`Usuario ${this.user.username} registrado con éxito`);
-      this.resetForm();
+      // Regex de validación
+      const nameRegex = /^[A-Za-z ]{4,20}$/;
+      const nidRegex = /^[A-Za-z0-9._-]{4,20}$/;
+      const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/;
+      const passwordRegex = /^[A-Za-z0-9._\-#$&*@]{6,20}$/;
+
+      if (!nameRegex.test(this.user.firstName)) {
+        alert("El nombre debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.");
+        return;
+      }
+      if (!nameRegex.test(this.user.lastName)) {
+        alert("El apellido debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.");
+        return;
+      }
+      if (!nidRegex.test(this.user.nid)) {
+        alert("El NID debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_");
+        return;
+      }
+      if (!usernameRegex.test(this.user.username)) {
+        alert("El usuario debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_");
+        return;
+      }
+      if (!passwordRegex.test(this.user.password)) {
+        alert("La contraseña debe tener entre 6 y 20 caracteres y puede contener letras, números y .-_ $#&*@");
+        return;
+      }
+
+      // Normalizar el rol en mayúsculas si el backend lo espera así
+      const payload = {
+        ...this.user,
+        role: this.user.role.toUpperCase(),
+      };
+
+      fetch("http://localhost:8080/employee", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("Error al registrar el usuario");
+          return response.json();
+        })
+        .then((data) => {
+          alert(`Usuario "${data.username}" registrado con éxito`);
+          this.resetForm();
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Hubo un problema al registrar el usuario.");
+        });
     },
     resetForm() {
       this.user = {
@@ -81,11 +137,14 @@ export default {
 };
 </script>
 
+
+
 <style scoped>
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
 
 .user-form {
-  background-color: #fff7ed; /* Naranja claro */
+  background-color: #fff7ed;
+  /* Naranja claro */
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -100,7 +159,8 @@ export default {
 .user-form h2 {
   margin-bottom: 1rem;
   font-size: 1.5rem;
-  color: #7c2d12; /* Naranja oscuro */
+  color: #7c2d12;
+  /* Naranja oscuro */
 }
 
 /* Grid para campos en dos columnas */

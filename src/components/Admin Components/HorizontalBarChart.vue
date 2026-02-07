@@ -1,6 +1,19 @@
 <template>
   <div class="chart-panel">
     <h2>{{ titulo }}</h2>
+
+    <!-- Barra de filtros de tiempo -->
+    <div class="time-filter-bar">
+      <button 
+        v-for="opcion in opcionesTiempo" 
+        :key="opcion.valor" 
+        :class="{ activo: filtroTiempo === opcion.valor }"
+        @click="cambiarFiltro(opcion.valor)"
+      >
+        {{ opcion.label }}
+      </button>
+    </div>
+
     <div class="chart-container">
       <Bar :data="chartData" :options="chartOptions" />
     </div>
@@ -8,6 +21,7 @@
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -28,6 +42,16 @@ const props = defineProps({
   color: String
 })
 
+// Opciones de tiempo
+const opcionesTiempo = [
+  { label: 'Última semana', valor: '1w' },
+  { label: 'Último mes', valor: '1m' },
+  { label: 'Últimos 3 meses', valor: '3m' },
+  { label: 'Últimos 6 meses', valor: '6m' }
+]
+
+const filtroTiempo = ref('1m')
+
 // Genera degradado por posición
 function generarDegradado(baseColor, total) {
   const colores = []
@@ -40,23 +64,57 @@ function generarDegradado(baseColor, total) {
 }
 
 const baseColor = props.color?.replace('#', '') || 'f97316'
-const coloresDegradados = generarDegradado(`#${baseColor}`, props.valores.length)
 
-const chartData = {
-  labels: props.labels,
+// Filtrado dinámico de datos según margen de tiempo
+const datosFiltrados = computed(() => {
+  let cantidad = props.valores.length
+  switch (filtroTiempo.value) {
+    case '1w':
+      cantidad = Math.min(7, props.valores.length)
+      break
+    case '1m':
+      cantidad = Math.min(30, props.valores.length)
+      break
+    case '3m':
+      cantidad = Math.min(90, props.valores.length)
+      break
+    case '6m':
+      cantidad = Math.min(180, props.valores.length)
+      break
+  }
+  return {
+    labels: props.labels.slice(-cantidad),
+    valores: props.valores.slice(-cantidad)
+  }
+})
+
+const coloresDegradados = computed(() =>
+  generarDegradado(`#${baseColor}`, datosFiltrados.value.valores.length)
+)
+
+const chartData = computed(() => ({
+  labels: datosFiltrados.value.labels,
   datasets: [
     {
       label: props.titulo,
-      data: props.valores,
-      backgroundColor: coloresDegradados
+      data: datosFiltrados.value.valores,
+      backgroundColor: coloresDegradados.value
     }
   ]
-}
+}))
 
 const chartOptions = {
   indexAxis: 'y',
   responsive: true,
   maintainAspectRatio: false,
+  layout: {
+    padding: {
+      top: 30, // más espacio arriba para texto
+      bottom: 20,
+      left: 20,
+      right: 20
+    }
+  },
   scales: {
     x: {
       beginAtZero: true,
@@ -75,7 +133,7 @@ const chartOptions = {
         font: {
           family: 'Inter',
           weight: '600',
-          size: 14
+          size: 12
         }
       }
     }
@@ -90,6 +148,10 @@ const chartOptions = {
     title: { display: false }
   }
 }
+
+function cambiarFiltro(valor) {
+  filtroTiempo.value = valor
+}
 </script>
 
 <style scoped>
@@ -101,7 +163,7 @@ const chartOptions = {
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   font-family: "Inter", sans-serif;
-  max-width: 800px;
+  max-width: 900px; /* más ancho para texto */
   width: 100%;
   margin: 0 auto 2rem auto;
   display: flex;
@@ -116,18 +178,46 @@ const chartOptions = {
   text-align: center;
 }
 
+/* Barra de filtros */
+.time-filter-bar {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.time-filter-bar button {
+  background-color: #fdba74;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  color: #7c2d12;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.time-filter-bar button:hover {
+  background-color: #fb923c;
+}
+
+.time-filter-bar button.activo {
+  background-color: #f97316;
+  color: #fff;
+}
+
 .chart-container {
   background-color: #fff;
-  padding: 0;
+  padding: 1rem; /* más espacio interno */
   border-radius: 8px;
   border: 1px solid #fdba74;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  width: 100%;
+  width: 80%;
   display: flex;
-  justify-content: center; /* ← centra horizontalmente */
-  align-items: center;     /* ← centra verticalmente si hay espacio */
+  margin: auto;
+  justify-content: center;
+  align-items: center;
 }
-
 
 canvas {
   width: 100% !important;

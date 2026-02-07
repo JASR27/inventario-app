@@ -34,7 +34,13 @@
             <td>{{ usuario.username }}</td>
             <td>{{ usuario.role }}</td>
             <td>
-              <button class="delete-button" @click.stop="eliminar(usuario)">Eliminar</button>
+              <button
+                class="delete-button"
+                @click.stop="terminarUsuario(usuario)"
+                :disabled="usuario.role === 'TERMINATED'"
+              >
+                Terminar
+              </button>
             </td>
           </tr>
         </tbody>
@@ -44,16 +50,26 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
-const usuarios = ref([
-  { firstName: 'Ana', lastName: 'Pérez', nid: '12345678', username: 'anap', password: '1234', role: 'user' },
-  { firstName: 'Luis', lastName: 'Gómez', nid: '87654321', username: 'luisg', password: 'abcd', role: 'admin' },
-  { firstName: 'María', lastName: 'Rodríguez', nid: '11223344', username: 'mariar', password: 'pass', role: 'user' }
-])
-
+const usuarios = ref([])
 const busqueda = ref('')
 const usuarioSeleccionado = ref(null)
+
+onMounted(() => {
+  fetch('http://localhost:8080/employee')
+    .then(response => {
+      if (!response.ok) throw new Error('Error al obtener usuarios')
+      return response.json()
+    })
+    .then(data => {
+      usuarios.value = data
+    })
+    .catch(error => {
+      console.error('Error al cargar usuarios:', error)
+      alert('No se pudo cargar la lista de usuarios.')
+    })
+})
 
 const usuariosFiltrados = computed(() => {
   const texto = busqueda.value.toLowerCase()
@@ -69,16 +85,33 @@ function seleccionar(usuario) {
   usuarioSeleccionado.value = usuario
 }
 
-function eliminar(usuario) {
-  const confirmado = window.confirm(`¿Estás seguro de que deseas eliminar al usuario "${usuario.username}"?`)
-  if (confirmado) {
-    usuarios.value = usuarios.value.filter(u => u.nid !== usuario.nid)
-    if (usuarioSeleccionado.value?.nid === usuario.nid) {
-      usuarioSeleccionado.value = null
-    }
-  }
-}
+function terminarUsuario(usuario) {
+  const confirmado = window.confirm(`¿Deseas marcar al usuario "${usuario.username}" como TERMINATED?`)
+  if (!confirmado) return
 
+  const id = usuario.id || usuario.nid
+
+  fetch(`http://localhost:8080/employee/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ role: 'TERMINATED' })
+  })
+    .then(response => {
+      if (!response.ok) throw new Error('Error al editar el usuario')
+      if (response.status === 204) return null
+      return response.json()
+    })
+    .then(() => {
+      alert(`Usuario "${usuario.username}" marcado como TERMINATED.`)
+      usuario.role = 'TERMINATED'
+    })
+    .catch(error => {
+      console.error('Error:', error)
+      alert('Hubo un problema al actualizar el estado del usuario.')
+    })
+}
 </script>
 
 <style scoped>

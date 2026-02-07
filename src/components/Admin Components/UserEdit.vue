@@ -45,27 +45,72 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="firstName">Primer Nombre:</label>
-              <input type="text" id="firstName" v-model="user.firstName" required />
+              <input
+                type="text"
+                id="firstName"
+                v-model="user.firstName"
+                required
+                minlength="4"
+                maxlength="20"
+                pattern="[A-Za-z ]{4,20}"
+                title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios"
+              />
             </div>
 
             <div class="form-group">
               <label for="lastName">Primer Apellido:</label>
-              <input type="text" id="lastName" v-model="user.lastName" required />
+              <input
+                type="text"
+                id="lastName"
+                v-model="user.lastName"
+                required
+                minlength="6"
+                maxlength="20"
+                pattern="[A-Za-z ]{4,20}"
+                title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios"
+              />
             </div>
 
             <div class="form-group">
               <label for="nid">NID:</label>
-              <input type="text" id="nid" v-model="user.nid" required />
+              <input
+                type="text"
+                id="nid"
+                v-model="user.nid"
+                required
+                minlength="6"
+                maxlength="20"
+                pattern="[A-Za-z0-9._-]{6,20}"
+                title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_"
+              />
             </div>
 
             <div class="form-group">
               <label for="username">Usuario:</label>
-              <input type="text" id="username" v-model="user.username" required />
+              <input
+                type="text"
+                id="username"
+                v-model="user.username"
+                required
+                minlength="6"
+                maxlength="20"
+                pattern="[A-Za-z0-9._-]{6,20}"
+                title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_"
+              />
             </div>
 
             <div class="form-group">
               <label for="password">Contraseña:</label>
-              <input type="password" id="password" v-model="user.password" required />
+              <input
+                type="password"
+                id="password"
+                v-model="user.password"
+                required
+                minlength="6"
+                maxlength="20"
+                pattern="[A-Za-z0-9._\\-#$&*@]{6,20}"
+                title="Debe tener entre 6 y 20 caracteres. Se permiten letras, números y .-_ $#&*@"
+              />
             </div>
 
             <div class="form-group">
@@ -74,18 +119,22 @@
                 <option value="" disabled>Selecciona un rol</option>
                 <option value="admin">Admin</option>
                 <option value="user">User</option>
+                <option value="terminated">Terminated</option>
               </select>
             </div>
           </div>
 
           <!-- Botones del formulario -->
           <div class="button-group">
-            <button type="button" @click="mostrarTabla = true; mostrarFormulario = false" class="toggle-button">
-              Mostrar tabla
+            <button
+              type="button"
+              @click="mostrarTabla = true; mostrarFormulario = false"
+              class="toggle-button"
+            >
+              Regresar
             </button>
             <button type="button" @click="resetForm">Limpiar</button>
             <button type="submit">Editar</button>
-            
           </div>
         </form>
       </div>
@@ -93,17 +142,12 @@
   </div>
 </template>
 
-
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
-const usuarios = ref([
-  { firstName: 'Ana', lastName: 'Pérez', nid: '12345678', username: 'anap', password: '1234', role: 'user' },
-  { firstName: 'Luis', lastName: 'Gómez', nid: '87654321', username: 'luisg', password: 'abcd', role: 'admin' },
-  { firstName: 'María', lastName: 'Rodríguez', nid: '11223344', username: 'mariar', password: 'pass', role: 'user' }
-])
-
+const usuarios = ref([])
 const user = ref({
+  id: null,
   firstName: '',
   lastName: '',
   nid: '',
@@ -116,6 +160,22 @@ const busqueda = ref('')
 const mostrarTabla = ref(true)
 const mostrarFormulario = ref(false)
 
+// 🔄 Cargar usuarios desde el backend al montar el componente
+onMounted(() => {
+  fetch('http://localhost:8080/employee')
+    .then(response => {
+      if (!response.ok) throw new Error('Error al obtener usuarios')
+      return response.json()
+    })
+    .then(data => {
+      usuarios.value = data
+    })
+    .catch(error => {
+      console.error('Error al cargar usuarios:', error)
+      alert('No se pudo cargar la lista de usuarios.')
+    })
+})
+
 const usuariosFiltrados = computed(() => {
   const texto = busqueda.value.toLowerCase()
   return usuarios.value.filter(u =>
@@ -127,19 +187,88 @@ const usuariosFiltrados = computed(() => {
 })
 
 function seleccionar(usuario) {
-  user.value = { ...usuario }
+  user.value = {
+    ...usuario,
+    role: usuario.role.toLowerCase()
+  }
   mostrarTabla.value = false
   mostrarFormulario.value = true
 }
 
 function handleSubmit() {
-  console.log('Datos del usuario:', user.value)
-  alert(`Usuario ${user.value.username} editado con éxito`)
-  resetForm()
+  // Regex de validación
+  const nameRegex = /^[A-Za-z ]{4,20}$/
+  const nidRegex = /^[A-Za-z0-9._-]{4,20}$/
+  const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/
+  const passwordRegex = /^[A-Za-z0-9._\-#$&*@]{6,20}$/
+
+  if (!nameRegex.test(user.value.firstName)) {
+    alert("El nombre debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.")
+    return
+  }
+  if (!nameRegex.test(user.value.lastName)) {
+    alert("El apellido debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.")
+    return
+  }
+  if (!nidRegex.test(user.value.nid)) {
+    alert("El NID debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_")
+    return
+  }
+  if (!usernameRegex.test(user.value.username)) {
+    alert("El usuario debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_")
+    return
+  }
+  if (!passwordRegex.test(user.value.password)) {
+    alert("La contraseña debe tener entre 6 y 20 caracteres y puede contener letras, números y .-_ $#&*@")
+    return
+  }
+
+  const id = user.value.id
+  const payload = {
+    firstName: user.value.firstName,
+    lastName: user.value.lastName,
+    nid: user.value.nid,
+    username: user.value.username,
+    password: user.value.password,
+    role: user.value.role.toUpperCase()
+  }
+
+  fetch(`http://localhost:8080/employee/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  })
+    .then(response => {
+      if (!response.ok) throw new Error('Error al editar el usuario')
+      if (response.status === 204) return null
+      return response.json()
+    })
+    .then(data => {
+      if (data) {
+        alert(`Usuario "${data.username}" editado con éxito`)
+      } else {
+        alert(`Usuario editado con éxito`)
+      }
+      mostrarFormulario.value = false
+      mostrarTabla.value = true
+      resetForm()
+      return fetch('http://localhost:8080/employee')
+    })
+    .then(response => response.json())
+    .then(data => {
+      usuarios.value = data
+    })
+    .catch(error => {
+      console.error('Error:', error)
+      alert('Hubo un problema al editar el usuario.')
+    })
 }
 
 function resetForm() {
   user.value = {
+    id: null,
     firstName: '',
     lastName: '',
     nid: '',
@@ -149,6 +278,7 @@ function resetForm() {
   }
 }
 </script>
+
 
 <style scoped>
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");

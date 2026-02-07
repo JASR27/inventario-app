@@ -5,24 +5,16 @@
       <div class="form-grid">
         <div class="form-group">
           <label for="name">Nombre del Proveedor:</label>
-          <input type="text" id="name" v-model="provider.name" required />
+          <input type="text" id="name" v-model="provider.name" required minlength="6" maxlength="50"
+            pattern="[A-Za-z0-9 ._-]{6,50}"
+            title="Debe tener entre 6 y 50 caracteres. Solo se permiten letras, números, espacios y .-_" />
         </div>
 
         <div class="form-group">
-          <label for="description">Descripción:</label>
-          <textarea id="description" v-model="provider.description" required></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="nid">NID (Número de Identificación):</label>
-          <input
-            type="text"
-            id="nid"
-            v-model="provider.nid"
-            required
-            pattern="^[A-Za-z0-9\-]+$"
-            title="Solo letras, números y guiones"
-          />
+          <label for="nid">NID:</label>
+          <input type="text" id="nid" v-model="provider.nid" required minlength="6" maxlength="20"
+            pattern="[A-Za-z0-9._-]{1,20}"
+            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
         </div>
       </div>
 
@@ -41,26 +33,57 @@ export default {
     return {
       provider: {
         name: "",
-        description: "",
         nid: "",
       },
     };
   },
   methods: {
     handleSubmit() {
-      if (!this.provider.nid.match(/^[A-Za-z0-9\-]+$/)) {
-        alert("El NID debe contener solo letras, números o guiones.");
+      const nameRegex = /^[A-Za-z0-9 ._-]{6,50}$/;
+      const nidRegex = /^[A-Za-z0-9._-]{1,20}$/;
+
+      if (!nameRegex.test(this.provider.name)) {
+        alert(
+          "El nombre debe tener entre 6 y 50 caracteres y solo puede contener letras, números, espacios y .-_"
+        );
         return;
       }
 
-      console.log("Datos del proveedor:", this.provider);
-      alert(`Proveedor "${this.provider.name}" registrado con éxito`);
-      this.resetForm();
+      if (!nidRegex.test(this.provider.nid)) {
+        alert(
+          "El NID debe tener de 6 a 20 caracteres y solo puede contener letras, números y .-_"
+        );
+        return;
+      }
+
+      const payload = {
+        name: this.provider.name,
+        nid: this.provider.nid,
+      };
+
+      fetch("http://localhost:8080/supplier", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("Error al registrar el proveedor");
+          return response.json();
+        })
+        .then((data) => {
+          alert(`Proveedor "${data.name}" registrado con éxito`);
+          this.resetForm();
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Hubo un problema al registrar el proveedor.");
+        });
     },
     resetForm() {
       this.provider = {
         name: "",
-        description: "",
         nid: "",
       };
     },
@@ -72,12 +95,13 @@ export default {
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
 
 .provider-form {
-  background-color: #f0fdf4; /* Fondo verde claro */
+  background-color: #f0fdf4;
+  /* Fondo verde claro */
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   font-family: "Inter", sans-serif;
-  max-width: 700px;
+  max-width: 500px;
   margin: auto;
   display: flex;
   flex-direction: column;
@@ -87,13 +111,13 @@ export default {
 .provider-form h2 {
   margin-bottom: 1rem;
   font-size: 1.5rem;
-  color: #166534; /* Título verde oscuro */
+  color: #166534;
+  /* Título verde oscuro */
 }
 
 /* Grid para campos en dos columnas */
 .form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+
   gap: 1.5rem;
 }
 
@@ -107,6 +131,7 @@ export default {
   font-weight: 600;
   color: #065f46;
   margin-bottom: 0.5rem;
+  margin-top: 1rem;
 }
 
 .provider-form input,
@@ -115,6 +140,7 @@ export default {
   border: 1px solid #a7f3d0;
   border-radius: 8px;
   font-size: 1rem;
+
   background-color: #fff;
   color: #1e293b;
   transition: border-color 0.3s ease;
@@ -162,4 +188,3 @@ button[type="button"]:hover {
   background-color: #a7f3d0;
 }
 </style>
-

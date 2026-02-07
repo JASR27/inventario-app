@@ -8,6 +8,7 @@ import EditUserView from '../views/Admin Views/EditUserView.vue'
 import DeleteUserView from '../views/Admin Views/DeleteUserView.vue'
 import PermissionApproval from '../views/Admin Views/PermissionApprovalView.vue'
 import CreateProductView from '../views/User Views/CreateProductView.vue'
+import CreateClientView from '../views/User Views/CreateClientView.vue'
 import CreateProviderView from '../views/User Views/CreateProviderView.vue'
 import PermissionRegisterView from '../views/User Views/PermissionRegisterView.vue'
 import AsistanceRegisterView from '../views/User Views/AsistanceRegisterView.vue'
@@ -16,6 +17,9 @@ import ShoppingCartView from '../views/User Views/ShoppingCartView.vue'
 import RepositionView from '../views/User Views/RepositionView.vue'
 import RefundView from '../views/User Views/RefundView.vue'
 import InventoryView from '../views/User Views/InventoryView.vue'
+import InventoryAdminView from '../views/Admin Views/InventoryAdminView.vue'
+import TransactionsView from '../views/Admin Views/TransactionsView.vue'
+import AdjusmentView from '../views/Admin Views/AdjusmentView.vue'
 
 const routes = [
   { path: '/', component: LoginView },
@@ -30,6 +34,7 @@ const routes = [
   { path: '/dashboard/empleado/registerProvider', component: CreateProviderView, meta: { requiereAuth: true, rol: 'empleado' } },
   { path: '/dashboard/empleado/Sale', component: ShoppingCartView, meta: { requiereAuth: true, rol: 'empleado' } },
   { path: '/dashboard/empleado/Refund', component: RefundView, meta: { requiereAuth: true, rol: 'empleado' } },
+  { path: '/dashboard/empleado/registerClient', component: CreateClientView, meta: { requiereAuth: true, rol: 'empleado' } },
   { path: '/dashboard/empleado/registerPermission', component: PermissionRegisterView, meta: { requiereAuth: true, rol: 'empleado' } },
   { path: '/dashboard/empleado/registerAssistance', component: AsistanceRegisterView, meta: { requiereAuth: true, rol: 'empleado' } },
 
@@ -39,7 +44,10 @@ const routes = [
   { path: '/dashboard/admin/editUser', component: EditUserView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/deleteUser', component: DeleteUserView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/permissions', component: PermissionApproval, meta: { requiereAuth: true, rol: 'admin' } },
-  { path: '/dashboard/admin/charts', component: GraphicView, meta: { requiereAuth: true, rol: 'admin' } }
+  { path: '/dashboard/admin/charts', component: GraphicView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/inventory', component: InventoryAdminView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/transactions', component: TransactionsView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/adjustment', component: AdjusmentView, meta: { requiereAuth: true, rol: 'admin' } }
 ]
 
 export const router = createRouter({

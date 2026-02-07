@@ -28,6 +28,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
+// Utilidades para cookies
 function getCookie(nombre) {
   const cookies = document.cookie.split(';')
   for (let c of cookies) {
@@ -47,13 +48,16 @@ function borrarCookie(nombre) {
   document.cookie = `${nombre}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/`
 }
 
+// Estado reactivo
 const usuario = getCookie('usuario') || 'Invitado'
+const userId = parseInt(getCookie('userid')) || null
 const estado = ref('entrada')
 const horaEntrada = ref(null)
 const entradaTimestamp = ref(null)
 const tiempoTranscurrido = ref('00h 00m 00s')
 let intervalo = null
 
+// Registrar entrada
 function registrarEntrada() {
   if (getCookie(`estado_${usuario}`) === 'salida') {
     alert('Ya existe una entrada registrada para este usuario.')
@@ -71,7 +75,8 @@ function registrarEntrada() {
   setCookie(`entradaTimestamp_${usuario}`, entradaTimestamp.value)
 }
 
-function registrarSalida() {
+// Registrar salida y enviar POST
+async function registrarSalida() {
   detenerTemporizador()
   const salidaTimestamp = new Date().getTime()
   const diferenciaMs = salidaTimestamp - entradaTimestamp.value
@@ -80,6 +85,34 @@ function registrarSalida() {
   const minutosRestantes = minutos % 60
 
   alert(`Tiempo total trabajado: ${horas}h ${minutosRestantes}min`)
+
+  const payload = {
+    startTime: new Date(entradaTimestamp.value).toISOString(),
+    hours: horas,
+    user: {
+      id: userId
+    }
+  }
+
+  try {
+    const response = await fetch('http://localhost:8080/attendance', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      throw new Error('Error al registrar asistencia')
+    }
+
+    console.log('Registro enviado correctamente')
+  } catch (error) {
+    console.error('Error en el envío:', error)
+    alert('Hubo un problema al registrar la asistencia.')
+  }
+
   estado.value = 'entrada'
   horaEntrada.value = null
   entradaTimestamp.value = null
@@ -90,6 +123,7 @@ function registrarSalida() {
   borrarCookie(`entradaTimestamp_${usuario}`)
 }
 
+// Temporizador en tiempo real
 function iniciarTemporizador() {
   detenerTemporizador()
   intervalo = setInterval(() => {
@@ -109,6 +143,7 @@ function detenerTemporizador() {
   }
 }
 
+// Restaurar estado si hay cookies previas
 onMounted(() => {
   const estadoGuardado = getCookie(`estado_${usuario}`)
   const horaGuardada = getCookie(`horaEntrada_${usuario}`)

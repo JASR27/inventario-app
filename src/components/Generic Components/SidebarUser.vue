@@ -14,6 +14,7 @@
       <li @click="toggle('Gestionar Transacciones')">
         Gestionar Transacciones
         <ul v-if="activo === 'Gestionar Transacciones'" class="submenu">
+          <li><router-link to="/dashboard/empleado/registerClient">Registrar cliente</router-link></li>
           <li><router-link to="/dashboard/empleado/Sale">Gestionar venta</router-link></li>
           <li><router-link to="/dashboard/empleado/Refund">Gestionar devolución</router-link></li>
         </ul>
@@ -23,7 +24,7 @@
         Mi Actividad
         <ul v-if="activo === 'Mi Actividad'" class="submenu">
           <li><router-link to="/dashboard/empleado/registerPermission">Solicitar permiso</router-link></li>
-          <li><router-link to="/dashboard/empleado/registerAssistance">Registrar asistencia</router-link></li>
+          
         </ul>
       </li>
 
@@ -47,7 +48,8 @@ function detectarSeccion(ruta) {
       ruta.includes('/dashboard/empleado/inventory')) {
     activo.value = 'Gestionar Inventario'
   } else if (ruta.includes('/dashboard/empleado/Sale') ||
-             ruta.includes('/dashboard/empleado/Refund')) {
+             ruta.includes('/dashboard/empleado/Refund') ||
+             ruta.includes('/dashboard/empleado/registerClient')) {
     activo.value = 'Gestionar Transacciones'
   } else if (ruta.includes('/dashboard/empleado/registerPermission') ||
              ruta.includes('/dashboard/empleado/registerAssistance')) {

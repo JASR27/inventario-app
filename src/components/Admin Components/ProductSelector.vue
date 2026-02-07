@@ -1,6 +1,6 @@
 <template>
   <div class="selector-panel">
-    <h2>Seleccionar producto</h2>
+    <h2>Seleccionar Producto</h2>
 
     <div class="table-controls">
       <div class="tasa-referencia" v-if="tasaCambio > 0">
@@ -9,7 +9,7 @@
       <input 
         type="text" 
         v-model="busqueda" 
-        placeholder="Buscar producto..." 
+        placeholder="Buscar por nombre, descripción o marca..." 
         class="search-input" 
       />
     </div>
@@ -21,8 +21,8 @@
             <th>Nombre</th>
             <th>Descripción</th>
             <th>Marca</th>
-            <th v-if="modo === 'venta'">Precio de venta</th>
-            <th v-else>Precio de compra</th>
+            <th v-if="modo === 'venta'">Precio Venta</th>
+            <th v-else>Precio de Compra</th>
           </tr>
         </thead>
         <tbody>
@@ -32,8 +32,8 @@
             @click="seleccionar(producto)"
           >
             <td>{{ producto.name }}</td>
-            <td>{{ producto.description }}</td>
-            <td>{{ producto.brand.name }}</td>
+            <td class="text-muted">{{ producto.description }}</td>
+            <td>{{ producto.brand?.name }}</td>
             <td class="col-precio-dual">
               <div class="precio-usd">
                 {{ formatearNumero(modo === 'venta' ? producto.sellingPrice : producto.buyingPrice) }}$
@@ -48,7 +48,7 @@
     </div>
 
     <div class="button-group">
-      <button type="button" @click="$emit('cerrar')">Cerrar</button>
+      <button type="button" class="btn-cerrar" @click="$emit('cerrar')">Cerrar</button>
     </div>
   </div>
 </template>
@@ -68,9 +68,6 @@ const productos = ref([])
 const busqueda = ref('')
 const tasaCambio = ref(0)
 
-/**
- * Formatea un número con separadores de miles (.) y decimales (,)
- */
 function formatearNumero(valor) {
   const numero = parseFloat(valor) || 0;
   return numero.toLocaleString('de-DE', {
@@ -83,7 +80,6 @@ function formatoBs(valor) {
   return 'Bs ' + formatearNumero(valor);
 }
 
-// Cargar tasa para la conversión
 async function fetchTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
@@ -103,19 +99,16 @@ async function fetchProductos() {
     const data = await response.json()
 
     if (props.modo === 'venta') {
-      // Optimizamos la carga de stock usando promesas en paralelo
       const promesas = data.map(async (p) => {
         try {
           const detalleResp = await fetch(`http://localhost:8080/product/detail/${p.id}`)
           if (!detalleResp.ok) return null
           const detalle = await detalleResp.json()
-          const totalStock = detalle.value.reduce((acc, v) => acc + (v.stock || 0), 0)
+          const variantes = Array.isArray(detalle) ? detalle : (detalle.value || [])
+          const totalStock = variantes.reduce((acc, v) => acc + (v.stock || 0), 0)
           return totalStock >= 1 ? p : null
-        } catch {
-          return null
-        }
+        } catch { return null }
       })
-
       const resultados = await Promise.all(promesas)
       productos.value = resultados.filter(p => p !== null)
     } else {
@@ -132,7 +125,7 @@ const productosFiltrados = computed(() => {
     p =>
       p.name.toLowerCase().includes(texto) ||
       p.description.toLowerCase().includes(texto) ||
-      p.brand.name.toLowerCase().includes(texto)
+      p.brand?.name.toLowerCase().includes(texto)
   )
 })
 
@@ -148,21 +141,22 @@ onMounted(() => {
 
 <style scoped>
 .selector-panel {
-  background-color: #f0fdf4;
+  background-color: #fff7ed; /* Naranja muy claro */
   padding: 2rem;
   border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 20px rgba(154, 52, 18, 0.1);
   font-family: "Inter", sans-serif;
   max-width: 900px;
   margin: 2vh auto;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  border: 1px solid #fdba74;
 }
 
 .selector-panel h2 {
   font-size: 1.5rem;
-  color: #166534;
+  color: #9a3412; /* Naranja oscuro */
   text-align: center;
   margin: 0;
 }
@@ -171,59 +165,75 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
 }
 
 .tasa-referencia {
-  background: #d1fae5;
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  color: #065f46;
-  font-weight: 600;
+  background: #ffedd5;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  color: #9a3412;
+  font-weight: 700;
+  border: 1px solid #fdba74;
 }
 
 .search-input {
+  flex: 1;
   padding: 0.75rem;
-  border: 1px solid #a7f3d0;
+  border: 1px solid #fdba74;
   border-radius: 8px;
   font-size: 1rem;
-  background-color: #fff;
-  color: #1e293b;
-  transition: border-color 0.3s ease;
-  width: 300px;
-  margin-left: 20px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
 }
 
 .table-container {
   max-height: 400px;
   overflow-y: auto;
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #fed7aa;
+  background: white;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
-  background-color: #fff;
 }
 
 thead {
-  background-color: #d1fae5;
-  color: #065f46;
+  background-color: #ffedd5;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
 }
 
-th, td {
-  padding: 0.75rem;
+th {
+  padding: 1rem;
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  color: #9a3412;
+  font-weight: 700;
+  border-bottom: 2px solid #fdba74;
+}
+
+td {
+  padding: 1rem;
+  border-bottom: 1px solid #fff7ed;
+  color: #431407;
 }
 
 tr:hover {
-  background-color: #ecfdf5;
+  background-color: #fff7ed;
   cursor: pointer;
+}
+
+.text-muted {
+  font-size: 0.85rem;
+  color: #7c2d12;
+  opacity: 0.7;
 }
 
 .col-precio-dual {
@@ -232,14 +242,13 @@ tr:hover {
 }
 
 .precio-usd {
-  font-weight: 700;
+  font-weight: 800;
   color: #1e293b;
-  font-size: 1rem;
 }
 
 .precio-bs {
   font-size: 0.8rem;
-  color: #10b981;
+  color: #f97316; /* Naranja vibrante para el precio en Bs */
   font-weight: 600;
 }
 
@@ -248,19 +257,18 @@ tr:hover {
   justify-content: flex-end;
 }
 
-button {
-  padding: 0.75rem 1.25rem;
+.btn-cerrar {
+  padding: 0.75rem 1.5rem;
+  background-color: #f3f4f6;
+  color: #374151;
   border: none;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  background-color: #e5e7eb;
-  color: #374151;
-  min-width: 140px;
-  transition: background 0.2s;
+  transition: 0.2s;
 }
 
-button:hover {
-  background-color: #d1d5db;
+.btn-cerrar:hover {
+  background-color: #e5e7eb;
 }
 </style>
