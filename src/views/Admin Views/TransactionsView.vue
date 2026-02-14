@@ -5,24 +5,42 @@
     <div v-if="!mostrarDetalle" class="transacciones-panel">
       <h2 class="titulo-central">Historial de {{ labelPlural }}</h2>
 
-      <div class="table-controls">
-        <div class="select-wrapper">
-          <label>Tipo de Movimiento</label>
-          <select v-model="tipoFiltro" class="filter-select" @change="fetchDatos">
-            <option value="sale">Ventas</option>
-            <option value="purchase">Reposiciones</option>
-            <option value="devolution">Devoluciones</option>
-            <option value="entry_adjustment">Ajustes de Entrada (+)</option>
-            <option value="exit_adjustment">Ajustes de Salida (-)</option>
-          </select>
-        </div>
+      <div class="toolbar-tabla">
+  <div class="control-group">
+    <label>Tipo:</label>
+    <select v-model="tipoFiltro" class="select-input-toolbar" @change="fetchDatos">
+      <option value="sale">Ventas</option>
+      <option value="purchase">Reposiciones</option>
+      <option value="devolution">Devoluciones</option>
+      <option value="entry_adjustment">Ajustes Entrada (+)</option>
+      <option value="exit_adjustment">Ajustes Salida (-)</option>
+    </select>
+  </div>
 
-        <div class="search-wrapper">
-          <label>Búsqueda Global</label>
-          <input type="text" v-model="busqueda" placeholder="Buscar por nombre, SKU, empleado o motivo..."
-            class="search-input" />
-        </div>
-      </div>
+  <div class="control-group">
+    <label>Buscar por:</label>
+    <select v-model="campoBusqueda" class="select-input-toolbar">
+      <option value="todos">Todos</option>
+      <option value="fecha">Fecha</option>
+      <option value="sujeto">{{ labelSujeto }}</option>
+      <option value="empleado">Responsable</option>
+      
+    </select>
+    <input type="text" v-model="busqueda" placeholder="Buscar..." class="search-input-toolbar" />
+  </div>
+
+  <div class="control-group">
+    <label>Ordenar:</label>
+    <select v-model="criterioOrden" class="select-input-toolbar">
+      <option value="createdAt">Fecha</option>
+      <option value="sujeto">{{ labelSujeto }}</option>
+      <option value="itemsCount">Cant. Items</option>
+    </select>
+    <button @click="ordenAscendente = !ordenAscendente" class="btn-orden-tabla">
+      {{ ordenAscendente ? 'Ascendente ▲' : 'Descendente ▼' }}
+    </button>
+  </div>
+</div>
 
       <div class="tabla-contenedor">
         <table class="tabla-elegante">
@@ -140,6 +158,9 @@ const busqueda = ref('')
 const tipoFiltro = ref('sale')
 const mostrarDetalle = ref(false)
 const transaccionSeleccionada = ref(null)
+const campoBusqueda = ref('todos') // Nuevo: para elegir dónde buscar
+const criterioOrden = ref('createdAt') // Nuevo: campo por el que se ordena
+const ordenAscendente = ref(false) // Nuevo: dirección del orden
 
 // Labels dinámicos
 const labelSingular = computed(() => ({ sale: 'Venta', purchase: 'Reposición', devolution: 'Devolución', entry_adjustment: 'Ajuste de Entrada', exit_adjustment: 'Ajuste de Salida' }[tipoFiltro.value]))
@@ -166,26 +187,42 @@ async function fetchDatos() {
 
 // BÚSQUEDA GLOBAL MEJORADA
 const transaccionesFiltradas = computed(() => {
-  const q = busqueda.value.toLowerCase().trim()
-  if (!q) return transacciones.value
+  // 1. Filtrado
+  let resultado = transacciones.value.filter(t => {
+    const q = busqueda.value.toLowerCase().trim()
+    if (!q) return true
 
-  return transacciones.value.filter(t => {
-    // 1. Buscar en Cliente/Proveedor/Motivo
-    const sujeto = obtenerSujeto(t).toLowerCase()
-    // 2. Buscar en Responsable (Empleado)
-    const empleado = `${t.employee.firstName} ${t.employee.lastName}`.toLowerCase()
-    // 3. Buscar en el motivo de ajuste (si existe)
-    const motivoExtra = (t.reason || '').toLowerCase()
-    // 4. Buscar en SKUs de los productos dentro de la transacción
-    const tieneSku = t.items.some(item =>
-      item.productDetail.sku.toLowerCase().includes(q)
-    )
+    const fFecha = formatoFecha(t.createdAt).toLowerCase().includes(q)
+    const fSujeto = obtenerSujeto(t).toLowerCase().includes(q)
+    const fEmpleado = `${t.employee?.firstName || ''} ${t.employee?.lastName || ''}`.toLowerCase().includes(q)
+    const fSku = (t.items || []).some(i => i.productDetail?.sku?.toLowerCase().includes(q))
 
-    return sujeto.includes(q) ||
-      empleado.includes(q) ||
-      motivoExtra.includes(q) ||
-      tieneSku
+    if (campoBusqueda.value === 'fecha') return fFecha
+    if (campoBusqueda.value === 'sujeto') return fSujeto
+    if (campoBusqueda.value === 'empleado') return fEmpleado
+    if (campoBusqueda.value === 'sku') return fSku
+    return fFecha || fSujeto || fEmpleado || fSku
   })
+
+  // 2. Ordenamiento
+  resultado.sort((a, b) => {
+    let aVal, bVal
+    if (criterioOrden.value === 'createdAt') {
+      aVal = new Date(a.createdAt).getTime()
+      bVal = new Date(b.createdAt).getTime()
+    } else if (criterioOrden.value === 'sujeto') {
+      aVal = obtenerSujeto(a).toLowerCase()
+      bVal = obtenerSujeto(b).toLowerCase()
+    } else {
+      aVal = totalProductos(a.items)
+      bVal = totalProductos(b.items)
+    }
+
+    const res = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+    return ordenAscendente.value ? res : -res
+  })
+
+  return resultado
 })
 
 const obtenerSujeto = (t) => t.client?.fullName || t.supplier?.name || t.reason || 'N/A'
@@ -217,7 +254,7 @@ onMounted(fetchDatos)
 .transacciones-panel,
 .transacciones-detalle {
   flex: 1;
-  padding: 2rem;
+  padding: 0;
   max-width: 1100px;
   margin: 0 auto;
   width: 100%;
@@ -225,11 +262,10 @@ onMounted(fetchDatos)
 
 .titulo-central {
   text-align: center;
-  font-size: 1.8rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: #7c2d12;
-  margin-bottom: 2rem;
-  text-transform: uppercase;
+  margin-bottom: 1rem;
   letter-spacing: 1px;
 }
 
@@ -242,15 +278,38 @@ onMounted(fetchDatos)
 }
 
 /* Controles */
-.table-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
-  margin-bottom: 2rem;
-  background: #fff7ed;
-  padding: 1.5rem;
+.toolbar-tabla {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background-color: #fdfdfd;
+  padding: 1rem;
   border-radius: 12px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+.control-group { display: flex; align-items: center; gap: 0.5rem; }
+.select-input-toolbar, .search-input-toolbar {
+  padding: 0.5rem;
   border: 1px solid #fdba74;
+  border-radius: 6px;
+  background: white;
+}
+.btn-orden-tabla {
+  background-color: #f97316;
+  color: white;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.control-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9a3412;
 }
 
 .select-wrapper,

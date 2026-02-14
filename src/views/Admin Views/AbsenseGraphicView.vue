@@ -2,14 +2,14 @@
     <div class="dashboard-graficos">
         <Sidebar />
 
-        <HorizontalBarChart />
+        <absensereport />
 
         
     </div>
 </template>
 
 <script setup>
-import HorizontalBarChart from '../../components/Admin Components/HorizontalBarChart.vue'
+import absensereport from '../../components/Admin Components/AbsenseReport.vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue';
 </script>
 

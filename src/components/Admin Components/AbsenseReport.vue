@@ -1,26 +1,26 @@
 <template>
   <div class="dashboard-wrapper">
-    <div v-if="loading" class="status-msg">Cargando datos de ventas...</div>
+    <div v-if="loading" class="status-msg">Cargando reporte de ausencias...</div>
     <div v-else-if="error" class="status-msg error">Error: {{ error }}</div>
 
     <div v-else>
       <header class="dashboard-header">
         <div class="header-top">
-          <h1>Reporte de Ventas</h1>
+          <h1>Reporte de Ausencias y Permisos</h1>
         </div>
         
         <div class="kpi-container">
           <div class="kpi-card">
-            <span class="label">Ventas Totales</span>
-            <span class="value">{{ metricas.totalVentas }}</span>
+            <span class="label">Permisos Solicitados</span>
+            <span class="value">{{ metricas.totalSolicitados }}</span>
           </div>
           <div class="kpi-card">
-            <span class="label">Productos Vendidos</span>
-            <span class="value">{{ metricas.totalProductos }}</span>
+            <span class="label">Permisos Aprobados</span>
+            <span class="value">{{ metricas.totalAprobados }}</span>
           </div>
           <div class="kpi-card highlight">
-            <span class="label">Monto Recaudado</span>
-            <span class="value">${{ metricas.montoTotal.toLocaleString() }}</span>
+            <span class="label">Horas Aprobadas</span>
+            <span class="value">{{ metricas.horasTotales }}h</span>
           </div>
 
           <div class="kpi-card filter-card">
@@ -36,16 +36,16 @@
 
       <div class="charts-grid">
         <div class="chart-panel main-chart">
-          <h3>Tendencia Temporal (Cantidades vs Montos)</h3>
+          <h3>Tendencia de Ausencias (Horas vs Cantidad)</h3>
           <div class="chart-container">
             <Chart type="bar" :data="dataTendencia" :options="optionsTendencia" />
           </div>
         </div>
 
         <div class="chart-panel side-chart">
-          <h3>Ventas por Vendedor</h3>
+          <h3>Empleados por Horas de Permiso</h3>
           <div class="chart-container">
-            <Bar :data="dataVendedores" :options="optionsVendedores" />
+            <Bar :data="dataEmpleados" :options="optionsEmpleados" />
           </div>
         </div>
       </div>
@@ -68,7 +68,7 @@ ChartJS.register(
 )
 
 // --- ESTADO ---
-const salesData = ref([])
+const absenceData = ref([])
 const loading = ref(true)
 const error = ref(null)
 const filtroTiempo = ref('1w')
@@ -81,12 +81,12 @@ const opcionesTiempo = [
 ]
 
 // --- FETCH DATA ---
-const fetchSales = async () => {
+const fetchAbsences = async () => {
   try {
     loading.value = true
-    const response = await fetch('http://localhost:8080/sale')
+    const response = await fetch('http://localhost:8080/absence')
     if (!response.ok) throw new Error('Error al conectar con el servidor')
-    salesData.value = await response.json()
+    absenceData.value = await response.json()
   } catch (err) {
     error.value = err.message
   } finally {
@@ -94,40 +94,36 @@ const fetchSales = async () => {
   }
 }
 
-onMounted(fetchSales)
+onMounted(fetchAbsences)
 
 // --- LÓGICA DE PROCESAMIENTO ---
-const ventasFiltradas = computed(() => {
+const datosFiltrados = computed(() => {
   const ahora = new Date()
   const limites = { '1w': 7, '1m': 30, '3m': 90, '1y': 365 }
   
-  return salesData.value.filter(venta => {
-    const diffDays = (ahora - new Date(venta.createdAt)) / (1000 * 60 * 60 * 24)
+  return absenceData.value.filter(item => {
+    // Usamos createdAt para el filtro de tiempo
+    const diffDays = (ahora - new Date(item.createdAt)) / (1000 * 60 * 60 * 24)
     return diffDays <= limites[filtroTiempo.value]
   })
 })
 
 const metricas = computed(() => {
-  let totalProd = 0
-  let monto = 0
-  ventasFiltradas.value.forEach(v => {
-    v.items.forEach(i => {
-      totalProd += i.quantity
-      monto += parseFloat(i.amount)
-    })
-  })
+  const aprobados = datosFiltrados.value.filter(a => a.permissionStatus === 'APPROVED')
+  const totalMinutos = aprobados.reduce((acc, curr) => acc + (curr.duration || 0), 0)
+  
   return {
-    totalVentas: ventasFiltradas.value.length,
-    totalProductos: totalProd,
-    montoTotal: monto
+    totalSolicitados: datosFiltrados.value.length,
+    totalAprobados: aprobados.length,
+    horasTotales: (totalMinutos / 60).toFixed(1)
   }
 })
 
-// Gráfico Tendencia
+// Gráfico Tendencia: Barras (Horas) vs Línea (Cantidad de Permisos)
 const dataTendencia = computed(() => {
   const grupos = {}
-  ventasFiltradas.value.forEach(v => {
-    const fecha = new Date(v.createdAt)
+  datosFiltrados.value.forEach(item => {
+    const fecha = new Date(item.createdAt)
     let label = ''
 
     if (filtroTiempo.value === '1w') {
@@ -139,9 +135,14 @@ const dataTendencia = computed(() => {
       label = fecha.toLocaleDateString('es-ES', { month: 'long' })
     }
 
-    if (!grupos[label]) grupos[label] = { monto: 0, cant: 0, ts: fecha.getTime() }
-    grupos[label].monto += v.items.reduce((acc, i) => acc + parseFloat(i.amount), 0)
-    grupos[label].cant += v.items.reduce((acc, i) => acc + i.quantity, 0)
+    if (!grupos[label]) grupos[label] = { horas: 0, cantidad: 0, ts: fecha.getTime() }
+    
+    // Solo sumamos horas si está aprobado
+    if (item.permissionStatus === 'APPROVED') {
+      grupos[label].horas += (item.duration || 0) / 60
+    }
+    // Contamos todas las solicitudes
+    grupos[label].cantidad += 1
   })
 
   const labelsOrdenados = Object.keys(grupos).sort((a, b) => grupos[a].ts - grupos[b].ts)
@@ -151,8 +152,8 @@ const dataTendencia = computed(() => {
     datasets: [
       {
         type: 'line',
-        label: 'Monto ($)',
-        data: labelsOrdenados.map(l => grupos[l].monto),
+        label: 'Cant. Permisos',
+        data: labelsOrdenados.map(l => grupos[l].cantidad),
         borderColor: '#f97316',
         backgroundColor: '#f97316',
         borderWidth: 3,
@@ -161,8 +162,8 @@ const dataTendencia = computed(() => {
       },
       {
         type: 'bar',
-        label: 'Cant. Productos',
-        data: labelsOrdenados.map(l => grupos[l].cant),
+        label: 'Horas Aprobadas',
+        data: labelsOrdenados.map(l => grupos[l].horas),
         backgroundColor: '#fbbf24aa',
         borderColor: '#fbbf24',
         borderWidth: 1,
@@ -173,22 +174,24 @@ const dataTendencia = computed(() => {
   }
 })
 
-// Gráfico Vendedores
-const dataVendedores = computed(() => {
-  const vends = {}
-  ventasFiltradas.value.forEach(v => {
-    const nombre = `${v.employee.firstName} ${v.employee.lastName}`
-    const total = v.items.reduce((acc, i) => acc + parseFloat(i.amount), 0)
-    vends[nombre] = (vends[nombre] || 0) + total
+// Gráfico Empleados por Horas de Permiso
+const dataEmpleados = computed(() => {
+  const emps = {}
+  datosFiltrados.value.forEach(item => {
+    if (item.permissionStatus === 'APPROVED') {
+      const nombre = `${item.requester.firstName} ${item.requester.lastName}`
+      const horas = (item.duration || 0) / 60
+      emps[nombre] = (emps[nombre] || 0) + horas
+    }
   })
 
-  const sortedVends = Object.entries(vends).sort((a, b) => b[1] - a[1])
+  const sortedEmps = Object.entries(emps).sort((a, b) => b[1] - a[1]).slice(0, 10)
 
   return {
-    labels: sortedVends.map(v => v[0]),
+    labels: sortedEmps.map(e => e[0]),
     datasets: [{
-      label: 'Total Vendido ($)',
-      data: sortedVends.map(v => v[1]),
+      label: 'Horas Totales',
+      data: sortedEmps.map(e => e[1]),
       backgroundColor: '#fbbf24aa', 
       borderColor: '#fbbf24',
       borderWidth: 1,
@@ -197,21 +200,23 @@ const dataVendedores = computed(() => {
   }
 })
 
-// --- OPCIONES ---
 const optionsTendencia = {
   responsive: true,
   maintainAspectRatio: false,
   scales: {
-    y: { type: 'linear', position: 'left', title: { display: true, text: 'Cantidad' } },
-    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Monto ($)' } }
+    y: { type: 'linear', position: 'left', title: { display: true, text: 'Horas' } },
+    y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'N° Solicitudes' } }
   }
 }
 
-const optionsVendedores = {
+const optionsEmpleados = {
   indexAxis: 'y',
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { display: false } }
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { title: { display: true, text: 'Horas' } }
+  }
 }
 </script>
 
@@ -227,7 +232,6 @@ const optionsVendedores = {
 .status-msg { text-align: center; padding: 3rem; font-size: 1.2rem; }
 .status-msg.error { color: #ef4444; background: #fee2e2; border-radius: 8px; }
 
-/* HEADER STYLES */
 .dashboard-header { 
   margin-bottom: 0.2rem; 
   display: flex;
@@ -242,7 +246,6 @@ const optionsVendedores = {
   color: #7c2d12; 
 }
 
-/* KPI CONTAINER - Sincronizado con 200px para el selector y 2rem de margen inferior */
 .kpi-container {
   display: grid;
   grid-template-columns: repeat(3, 1fr) 200px;
@@ -274,7 +277,6 @@ const optionsVendedores = {
 
 .highlight { border-top: 4px solid #f97316; }
 
-/* ESTILO PARA EL SELECTOR EN TARJETA */
 .filter-card { 
   justify-content: center; 
 }
@@ -290,7 +292,6 @@ const optionsVendedores = {
   cursor: pointer;
 }
 
-/* GRIDS Y PANELES */
 .charts-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -313,7 +314,6 @@ const optionsVendedores = {
   text-align: center; 
 }
 
-/* ALTURA AJUSTADA A 360PX */
 .chart-container { 
   height: 360px; 
   position: relative; 

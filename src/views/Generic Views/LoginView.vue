@@ -28,7 +28,7 @@ function setCookie(nombre, valor, dias = 1) {
 
 async function login() {
   cargando.value = true
-  
+
   try {
     const respuesta = await fetch('http://localhost:8080/auth', {
       method: 'POST',
@@ -42,8 +42,12 @@ async function login() {
     })
 
     if (respuesta.status === 200) {
-      // El backend responde con el ID del usuario como texto plano
-      const userId = await respuesta.text()
+      // 1. Convertimos la respuesta de JSON a un objeto de JavaScript
+      const data = await respuesta.json();
+
+      // 2. Extraemos el ID (y cualquier otro dato que necesites)
+      const userId = data.id;
+      const userRole = data.role;
 
       // Guardar sesión
       localStorage.setItem('autenticado', 'true')
@@ -54,7 +58,7 @@ async function login() {
       // Nota: Como el backend solo devuelve el ID, aquí podrías 
       // decidir el rol basándote en el ID o hacer otra petición.
       // Por ahora, simularemos que el ID "1" es el admin.
-      if (userId === '1') {
+      if (userRole === "ADMIN") {
         localStorage.setItem('rol', 'admin')
         router.push('/dashboard/admin')
       } else {
@@ -149,6 +153,3 @@ button:disabled {
   cursor: not-allowed;
 }
 </style>
-
-
-

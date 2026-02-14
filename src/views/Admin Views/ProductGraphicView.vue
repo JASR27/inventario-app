@@ -2,14 +2,14 @@
     <div class="dashboard-graficos">
         <Sidebar />
 
-        <HorizontalBarChart />
+        <productreport  />
 
         
     </div>
 </template>
 
 <script setup>
-import HorizontalBarChart from '../../components/Admin Components/HorizontalBarChart.vue'
+import productreport from '../../components/Admin Components/ProductReport.vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue';
 </script>
 

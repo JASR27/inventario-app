@@ -18,20 +18,21 @@
         <div class="form-group">
           <label for="nid">NID:</label>
           <input type="text" id="nid" v-model="user.nid" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9._-]{6,20}"
+            pattern="[A-Za-z0-9\-._]{6,20}"
             title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
         </div>
 
         <div class="form-group">
           <label for="username">Usuario:</label>
           <input type="text" id="username" v-model="user.username" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9._-]{6,20}" title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
+            pattern="[A-Za-z0-9\-._]{6,20}"
+            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
         </div>
 
         <div class="form-group">
           <label for="password">Contraseña:</label>
           <input type="password" id="password" v-model="user.password" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9._\-#$&*@]{6,20}"
+            pattern="[A-Za-z0-9\-._#$&*@]{6,20}"
             title="Debe tener entre 6 y 20 caracteres. Se permiten letras, números y .-_ $#&*@" />
         </div>
 
@@ -71,9 +72,16 @@ export default {
   methods: {
     handleSubmit() {
       // Regex de validación
+      // Permite letras y espacios (Mínimo 4, máximo 20)
       const nameRegex = /^[A-Za-z ]{4,20}$/;
+
+      // El guion al final para que sea tomado como un carácter literal
       const nidRegex = /^[A-Za-z0-9._-]{4,20}$/;
+
+      // El guion al final
       const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/;
+
+      // Escapamos el guion con \- para evitar cualquier conflicto con los símbolos especiales
       const passwordRegex = /^[A-Za-z0-9._\-#$&*@]{6,20}$/;
 
       if (!nameRegex.test(this.user.firstName)) {

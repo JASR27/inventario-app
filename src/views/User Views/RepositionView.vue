@@ -219,7 +219,7 @@ async function guardarCarrito() {
     const body = {
       employeeId,
       supplierId: proveedorSeleccionado.value,
-      invoiceNumber: factura.value, // Asegúrate de que tu backend reciba este campo
+      bill: factura.value, // Asegúrate de que tu backend reciba este campo
       items: carrito.value
         .filter(i => i.talla && i.color && i.cantidad)
         .map(i => {

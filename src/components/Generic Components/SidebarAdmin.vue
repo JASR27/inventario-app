@@ -19,9 +19,9 @@
       <li @click="toggle('Visualizar Reportes')">
         Visualizar Reportes
         <ul v-if="activo === 'Visualizar Reportes'" class="submenu">
-          <li><router-link to="/dashboard/admin/charts">Reportes de ventas</router-link></li>
-          <li><router-link to="/dashboard/empleado/stock">Reportes de inventario</router-link></li>
-          <li><router-link to="/dashboard/empleado/stock">Reportes de personal</router-link></li>
+          <li><router-link to="/dashboard/admin/saleCharts">Reportes de ventas</router-link></li>
+          <li><router-link to="/dashboard/admin/productCharts">Reportes de productos</router-link></li>
+          <li><router-link to="/dashboard/admin/absenceCharts">Reportes de personal</router-link></li>
         </ul>
       </li>
 
@@ -54,11 +54,13 @@ function detectarSeccion(ruta) {
     activo.value = 'Gestionar Usuarios'
   } else if (ruta.includes('/dashboard/admin/permissions')) {
     activo.value = 'Gestionar RRHH'
-  } else if (ruta.includes('/dashboard/admin/charts') ||
-             ruta.includes('/dashboard/empleado/stock')) {
+  } else if (ruta.includes('/dashboard/admin/saleCharts') ||
+             ruta.includes('/dashboard/admin/productCharts') ||
+             ruta.includes('/dashboard/admin/absenseCharts')) {
     activo.value = 'Visualizar Reportes'
-  } else if (ruta.includes('/dashboard/empleado/productos') ||
-             ruta.includes('/dashboard/empleado/stock')) {
+  } else if (ruta.includes('/dashboard/admin/inventory') ||
+             ruta.includes('/dashboard/admin/transactions') ||
+             ruta.includes('/dashboard/admin/adjustment')) {
     activo.value = 'Gestionar Registros'
   } else {
     activo.value = null

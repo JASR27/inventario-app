@@ -20,6 +20,8 @@ import InventoryView from '../views/User Views/InventoryView.vue'
 import InventoryAdminView from '../views/Admin Views/InventoryAdminView.vue'
 import TransactionsView from '../views/Admin Views/TransactionsView.vue'
 import AdjusmentView from '../views/Admin Views/AdjusmentView.vue'
+import ProductGraphicView from '../views/Admin Views/ProductGraphicView.vue'
+import AbsenseGraphicView from '../views/Admin Views/AbsenseGraphicView.vue'
 
 const routes = [
   { path: '/', component: LoginView },
@@ -44,7 +46,9 @@ const routes = [
   { path: '/dashboard/admin/editUser', component: EditUserView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/deleteUser', component: DeleteUserView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/permissions', component: PermissionApproval, meta: { requiereAuth: true, rol: 'admin' } },
-  { path: '/dashboard/admin/charts', component: GraphicView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/saleCharts', component: GraphicView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/productCharts', component: ProductGraphicView, meta: { requiereAuth: true, rol: 'admin' } },
+  { path: '/dashboard/admin/absenceCharts', component: AbsenseGraphicView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/inventory', component: InventoryAdminView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/transactions', component: TransactionsView, meta: { requiereAuth: true, rol: 'admin' } },
   { path: '/dashboard/admin/adjustment', component: AdjusmentView, meta: { requiereAuth: true, rol: 'admin' } }

@@ -2,7 +2,34 @@
   <div class="permission-container">
     <h2>Solicitudes de Permiso</h2>
 
-    <table class="permissions-table" v-if="permissions.length">
+    <div class="toolbar-tabla" v-if="permissions.length">
+      <div class="control-group">
+        <label>Buscar por:</label>
+        <select v-model="campoBusqueda" class="select-input-toolbar">
+          <option value="todos">Todos los campos</option>
+          <option value="requester">Solicitante</option>
+          <option value="reason">Razón</option>
+          <option value="permissionStatus">Estado</option>
+          <option value="fecha">Fecha (DD/MM/AAAA)</option>
+        </select>
+        <input type="text" v-model="busqueda" :placeholder="placeholderBusqueda" class="search-input-toolbar" />
+      </div>
+
+      <div class="control-group">
+        <label>Ordenar por:</label>
+        <select v-model="criterioOrden" class="select-input-toolbar">
+          <option value="startTime">Fecha/Hora</option>
+          <option value="requester">Solicitante</option>
+          <option value="reason">Razón</option>
+          <option value="permissionStatus">Estado</option>
+        </select>
+        <button @click="ordenAscendente = !ordenAscendente" class="btn-orden-tabla">
+          {{ ordenAscendente ? 'Ascendente ▲' : 'Descendente ▼' }}
+        </button>
+      </div>
+    </div>
+
+    <table class="permissions-table" v-if="permissionsFiltradosYOrdenados.length">
       <thead>
         <tr>
           <th>Solicitante</th>
@@ -11,12 +38,11 @@
           <th>Fecha</th>
           <th>Inicio</th>
           <th>Fin</th>
-          
           <th>Acciones</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="perm in permissions" :key="perm.id">
+        <tr v-for="perm in permissionsFiltradosYOrdenados" :key="perm.id">
           <td>
             {{ perm.requester
               ? perm.requester.firstName + ' ' + perm.requester.lastName
@@ -31,7 +57,6 @@
           <td>{{ formatDateOnly(perm.startTime) }}</td>
           <td>{{ formatTimeOnly(perm.startTime) }}</td>
           <td>{{ formatTimeOnly(getEndTime(perm.startTime, perm.duration)) }}</td>
-          
           <td>
             <div class="action-buttons" v-if="perm.permissionStatus === 'PENDING'">
               <button @click="approvePermission(perm.id)" class="approve">Aprobar</button>
@@ -42,6 +67,7 @@
       </tbody>
     </table>
 
+    <p v-else-if="permissions.length > 0">No se encontraron resultados para la búsqueda.</p>
     <p v-else>No hay permisos pendientes.</p>
   </div>
 </template>
@@ -52,30 +78,85 @@ export default {
   data() {
     return {
       permissions: [],
+      // Nuevos estados para filtros
+      busqueda: '',
+      campoBusqueda: 'todos',
+      criterioOrden: 'startTime',
+      ordenAscendente: false, // Por defecto más recientes primero
     };
+  },
+  computed: {
+    placeholderBusqueda() {
+      const ops = {
+        todos: 'Buscar...',
+        requester: 'Nombre...',
+        reason: 'Razón...',
+        permissionStatus: 'Estado...',
+        fecha: 'Ej: 14/02/2026...' // Nuevo placeholder
+      };
+      return ops[this.campoBusqueda];
+    },
+    permissionsFiltradosYOrdenados() {
+      let filtrados = this.permissions.filter(p => {
+        const texto = this.busqueda.toLowerCase().trim();
+        if (!texto) return true;
+
+        // 1. Datos base
+        const nombreCompleto = p.requester ? `${p.requester.firstName} ${p.requester.lastName}`.toLowerCase() : '';
+        const mREQ = nombreCompleto.includes(texto);
+        const mRES = (p.reason || '').toLowerCase().includes(texto);
+        const mSTA = (p.permissionStatus || '').toLowerCase().includes(texto);
+
+        // 2. Lógica para Fecha (convertimos el timestamp a string formateado)
+        const fechaFormateada = this.formatDateOnly(p.startTime); // Ya es string DD/MM/AAAA
+        const mFEC = fechaFormateada.includes(texto);
+
+        // 3. Retorno según el campo seleccionado
+        if (this.campoBusqueda === 'requester') return mREQ;
+        if (this.campoBusqueda === 'reason') return mRES;
+        if (this.campoBusqueda === 'permissionStatus') return mSTA;
+        if (this.campoBusqueda === 'fecha') return mFEC; // Nuevo filtro
+
+        // Si es "todos", incluimos también la fecha
+        return mREQ || mRES || mSTA || mFEC;
+      });
+
+      // ... (Mantén el resto de la lógica de ordenamiento igual)
+      filtrados.sort((a, b) => {
+        let vA, vB;
+        if (this.criterioOrden === 'requester') {
+          vA = a.requester ? (a.requester.firstName + a.requester.lastName).toLowerCase() : '';
+          vB = b.requester ? (b.requester.firstName + b.requester.lastName).toLowerCase() : '';
+        } else {
+          vA = (a[this.criterioOrden] || '').toString().toLowerCase();
+          vB = (b[this.criterioOrden] || '').toString().toLowerCase();
+        }
+
+        if (this.criterioOrden === 'startTime') {
+          return this.ordenAscendente ? a.startTime - b.startTime : b.startTime - a.startTime;
+        }
+        return this.ordenAscendente ? vA.localeCompare(vB) : vB.localeCompare(vA);
+      });
+
+      return filtrados;
+    }
   },
   mounted() {
     this.fetchPermissions();
   },
   methods: {
+    // ... Tus métodos actuales (formatDateOnly, formatTimeOnly, getEndTime, etc.) sin cambios
     formatDateOnly(epochMillis) {
       const d = new Date(Number(epochMillis));
-      return d.toLocaleDateString([], {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
+      return d.toLocaleDateString([], { year: "numeric", month: "2-digit", day: "2-digit" });
     },
     formatTimeOnly(epochMillis) {
       const d = new Date(Number(epochMillis));
-      return d.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     },
     getEndTime(startMillis, durationMinutes) {
-      return Number(startMillis) + durationMinutes * 60000;
+      // startMillis ya viene en milisegundos gracias al ajuste en fetchPermissions
+      return Number(startMillis) + (durationMinutes * 60000);
     },
     getCookie(name) {
       const value = `; ${document.cookie}`;
@@ -88,12 +169,13 @@ export default {
         const res = await fetch("http://localhost:8080/absence");
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
         const data = await res.json();
-        this.permissions = data
-          .map((p) => ({
-            ...p,
-            startTime: Number(p.startTime) / 1000,
-          }))
-          .sort((a, b) => b.startTime - a.startTime);
+
+        this.permissions = data.map((p) => ({
+          ...p,
+          // ELIMINA LA DIVISIÓN POR 1000
+          // Simplemente asegúrate de que sea un número
+          startTime: Math.floor(Number(p.startTime) / 1000),
+        }));
       } catch (e) {
         console.error("Error cargando permisos:", e);
       }
@@ -104,12 +186,7 @@ export default {
         alert("No se encontró el ID del supervisor en las cookies.");
         return;
       }
-
-      const body = {
-        permissionStatus: status,
-        supervisorId: parseInt(supervisorId),
-      };
-
+      const body = { permissionStatus: status, supervisorId: parseInt(supervisorId) };
       try {
         const res = await fetch(`http://localhost:8080/absence/${id}`, {
           method: "PUT",
@@ -124,17 +201,67 @@ export default {
         alert("No se pudo actualizar el estado del permiso.");
       }
     },
-    approvePermission(id) {
-      this.updatePermissionStatus(id, "APPROVED");
-    },
-    rejectPermission(id) {
-      this.updatePermissionStatus(id, "REJECTED");
-    },
+    approvePermission(id) { this.updatePermissionStatus(id, "APPROVED"); },
+    rejectPermission(id) { this.updatePermissionStatus(id, "REJECTED"); },
   },
 };
 </script>
 
 <style scoped>
+/* Agrega estos estilos a tu bloque <> existente */
+
+.toolbar-tabla {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  background-color: #f7f7f7;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  max-width: 1100px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #9a3412;
+}
+
+.select-input-toolbar,
+.search-input-toolbar {
+  padding: 0.5rem;
+  border: 1px solid #fdba74;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.search-input-toolbar {
+  flex: 1;
+  min-width: 200px;
+}
+
+.btn-orden-tabla {
+  background-color: #f97316;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* ... Mantén tus otros estilos igual ... */
+
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
 
 /* Fuente global */
@@ -159,7 +286,7 @@ body {
 
 /* Tabla de permisos */
 .permissions-table {
-  background-color: #fff7ed;
+  background-color: #ffffff;
   border-collapse: collapse;
   border-radius: 12px;
   overflow: hidden;
@@ -176,14 +303,14 @@ body {
 
 h2 {
   color: #78350f;
-  
+
 }
 
 .permissions-table th,
 .permissions-table td {
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 1px solid #fde68a;
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .permissions-table tbody tr {

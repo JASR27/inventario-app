@@ -5,19 +5,45 @@
     <div v-if="!mostrarFormularioDevolucion" class="devolucion-panel">
       <h2>Devolución de una Venta</h2>
 
-      <div class="table-controls">
-        <input
-          type="text"
-          v-model="busqueda"
-          placeholder="Buscar por cliente o NID..."
-          class="search-input"
-        />
+      <div class="toolbar">
+        <div class="control-group">
+          <label>Buscar por:</label>
+          <select v-model="campoBusqueda" class="select-input">
+            
+            <option value="todos">Todos los campos</option>
+            <option value="fecha">Fecha (DD/MM/AAAA)</option>
+            <option value="id">Nro. Venta</option>
+            <option value="fullName">Cliente</option>
+            <option value="nid">NID / Cédula</option>            
+            <option value="employee">Responsable</option>
+            
+          </select>
+
+
+
+
+          <input type="text" v-model="busqueda" :placeholder="placeholderBusqueda" class="search-input" />
+        </div>
+
+        <div class="control-group">
+          <label>Ordenar por:</label>
+          <select v-model="criterioOrden" class="select-input">
+            <option value="createdAt">Fecha</option>
+            <option value="id">Nro. Venta</option>
+            <option value="fullName">Cliente</option>
+            <option value="employee">Responsable</option>
+          </select>
+          <button @click="ordenAscendente = !ordenAscendente" class="btn-orden">
+            {{ ordenAscendente ? 'Ascendente ▲' : 'Descendente ▼' }}
+          </button>
+        </div>
       </div>
 
       <table class="tabla-transacciones">
         <thead>
           <tr>
             <th>Fecha</th>
+            <th>Nro. Venta</th>
             <th>Cliente</th>
             <th>NID</th>
             <th>Responsable</th>
@@ -25,16 +51,13 @@
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="(transaccion, index) in transaccionesFiltradas"
-            :key="index"
-            @click="!esVentaDevuelta(transaccion.id) && seleccionarTransaccion(transaccion)"
-            :class="{ 
+          <tr v-for="(transaccion, index) in transaccionesFiltradas" :key="index"
+            @click="!esVentaDevuelta(transaccion.id) && seleccionarTransaccion(transaccion)" :class="{
               'fila-deshabilitada': esVentaDevuelta(transaccion.id),
-              'cargando-fila': cargandoDetalles === transaccion.id 
-            }"
-          >
+              'cargando-fila': cargandoDetalles === transaccion.id
+            }">
             <td class="col-fecha">{{ formatoFecha(transaccion.createdAt) }}</td>
+            <td>#{{ transaccion.id }}</td>
             <td class="col-cliente">{{ transaccion.client.fullName }}</td>
             <td class="col-nid">{{ transaccion.client.nid }}</td>
             <td>{{ transaccion.employee.firstName }} {{ transaccion.employee.lastName }}</td>
@@ -59,16 +82,18 @@
 
         <div class="venta-info">
           <small>
-            Cliente: <strong>{{ transaccionSeleccionada.client.fullName }}</strong> 
+            Cliente: <strong>{{ transaccionSeleccionada.client.fullName }}</strong>
             <span class="divider">|</span>
             NID: <strong>{{ transaccionSeleccionada.client.nid }}</strong>
             <span class="divider">|</span>
-            Venta: <strong>#{{ transaccionSeleccionada.id }}</strong> 
+            Venta: <strong>#{{ transaccionSeleccionada.id }}</strong>
             <span class="divider">|</span>
             Fecha: <strong>{{ formatoFecha(transaccionSeleccionada.createdAt) }}</strong>
           </small>
         </div>
       </div>
+
+      
 
       <table class="tabla-productos-form">
         <thead>
@@ -84,7 +109,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(producto, index) in devoluciones" :key="index">
+          <tr v-for="(producto, index) in itemsFiltrados" :key="index">
             <td><code class="sku-tag">{{ producto.sku }}</code></td>
             <td>
               <div class="nombre-producto">{{ producto.name }}</div>
@@ -93,8 +118,8 @@
             <td>{{ producto.color }}</td>
             <td>{{ producto.talla }}</td>
             <td class="col-precio-dual">
-               <div class="bs-price"><strong>{{ producto.precio.toFixed(2) }}$</strong></div>
-               <div class="usd-price" v-if="tasaCambio > 0">{{ formatoBs(producto.precio * tasaCambio) }}</div>
+              <div class="bs-price"><strong>{{ producto.precio.toFixed(2) }}$</strong></div>
+              <div class="usd-price" v-if="tasaCambio > 0">{{ formatoBs(producto.precio * tasaCambio) }}</div>
             </td>
             <td style="text-align: center;">{{ producto.cantidad }}</td>
             <td>
@@ -135,21 +160,115 @@
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
 
+// --- ESTADOS ---
 const transacciones = ref([])
 const listaDevoluciones = ref([])
-const busqueda = ref('')
 const mostrarFormularioDevolucion = ref(false)
 const transaccionSeleccionada = ref(null)
-const devoluciones = ref([])
+const devoluciones = ref([]) // Estos son los items del formulario
 const cargando = ref(false)
-const cargandoDetalles = ref(null) 
+const cargandoDetalles = ref(null)
 const tasaCambio = ref(0)
+
+// Controles Tabla Principal
+const busqueda = ref('')
+const campoBusqueda = ref('todos')
+const criterioOrden = ref('createdAt')
+const ordenAscendente = ref(false)
+
+// Controles Tabla Formulario (Items)
+const busquedaItem = ref('')
+const criterioOrdenItem = ref('name')
+const ordenAscendenteItem = ref(true)
 
 onMounted(() => {
   fetchDatos()
   obtenerTasa()
 })
 
+// --- LÓGICA DE FILTRADO Y ORDEN (VISTA PRINCIPAL) ---
+const placeholderBusqueda = computed(() => {
+  const ops = {
+    todos: 'Buscar en todos los campos...',
+    id: 'Ej: #15...',
+    nid: 'Ej: V-12345678',
+    fullName: 'Nombre del cliente...',
+    employee: 'Nombre del empleado...',
+    fecha: 'Ej: 14/02/2026'
+  }
+  return ops[campoBusqueda.value]
+})
+
+const transaccionesFiltradas = computed(() => {
+  let list = [...transacciones.value]
+
+  // --- BUSQUEDA ---
+  if (busqueda.value) {
+    const t = busqueda.value.toLowerCase()
+    list = list.filter(tr => {
+      const idVenta = tr.id.toString()
+      const cliente = tr.client.fullName.toLowerCase()
+      const nid = tr.client.nid.toLowerCase()
+      const empleado = `${tr.employee.firstName} ${tr.employee.lastName}`.toLowerCase()
+      const fecha = formatoFecha(tr.createdAt).toLowerCase()
+
+      if (campoBusqueda.value === 'id') return idVenta.includes(t)
+      if (campoBusqueda.value === 'nid') return nid.includes(t)
+      if (campoBusqueda.value === 'fullName') return cliente.includes(t)
+      if (campoBusqueda.value === 'employee') return empleado.includes(t)
+      if (campoBusqueda.value === 'fecha') return fecha.includes(t)
+      
+      return idVenta.includes(t) || cliente.includes(t) || nid.includes(t) || empleado.includes(t) || fecha.includes(t)
+    })
+  }
+
+  // --- ORDENAMIENTO ---
+  list.sort((a, b) => {
+    let valA, valB
+
+    if (criterioOrden.value === 'employee') {
+      valA = `${a.employee.firstName} ${a.employee.lastName}`.toLowerCase()
+      valB = `${b.employee.firstName} ${b.employee.lastName}`.toLowerCase()
+    } else if (criterioOrden.value === 'fullName') {
+      valA = a.client.fullName.toLowerCase()
+      valB = b.client.fullName.toLowerCase()
+    } else {
+      valA = a[criterioOrden.value]
+      valB = b[criterioOrden.value]
+    }
+
+    // Prioridad: Ventas devueltas al final
+    const devA = esVentaDevuelta(a.id)
+    const devB = esVentaDevuelta(b.id)
+    if (devA !== devB) return devA - devB
+
+    const res = typeof valA === 'string' ? valA.localeCompare(valB) : (valA || 0) - (valB || 0)
+    return ordenAscendente.value ? res : -res
+  })
+
+  return list
+})
+
+// --- LÓGICA DE FILTRADO Y ORDEN (VISTA FORMULARIO) ---
+const itemsFiltrados = computed(() => {
+  let list = [...devoluciones.value]
+
+  if (busquedaItem.value) {
+    const term = busquedaItem.value.toLowerCase()
+    list = list.filter(i => i.name.toLowerCase().includes(term) || i.sku.toLowerCase().includes(term))
+  }
+
+  list.sort((a, b) => {
+    const valA = a[criterioOrdenItem.value]
+    const valB = b[criterioOrdenItem.value]
+    const res = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB
+    return ordenAscendenteItem.value ? res : -res
+  })
+
+  return list
+})
+
+// --- FUNCIONES EXISTENTES ---
 async function obtenerTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
@@ -170,22 +289,12 @@ function esVentaDevuelta(saleId) {
   return idsVentasDevueltas.value.has(saleId)
 }
 
-const transaccionesFiltradas = computed(() => {
-  const filtradas = transacciones.value.filter(t =>
-    t.client.nid.toLowerCase().includes(busqueda.value.toLowerCase()) ||
-    t.client.fullName.toLowerCase().includes(busqueda.value.toLowerCase())
-  )
-  return filtradas.sort((a, b) => esVentaDevuelta(a.id) - esVentaDevuelta(b.id))
-})
-
 async function seleccionarTransaccion(transaccion) {
   cargandoDetalles.value = transaccion.id;
-  
   try {
     const itemsPrometidos = transaccion.items.map(async (i) => {
-      // Extraer ID del SKU (Ej: ZAP-1-40-NEGRO -> partes[1] = "1")
       const partesSku = i.productDetail.sku.split('-');
-      const productId = partesSku[1]; 
+      const productId = partesSku[1];
 
       let nombreProducto = "Producto";
       let marcaProducto = "---";
@@ -197,9 +306,7 @@ async function seleccionarTransaccion(transaccion) {
           nombreProducto = data.name;
           marcaProducto = data.brand?.name || "Sin Marca";
         }
-      } catch (err) {
-        console.error("Error cargando producto:", err);
-      }
+      } catch (err) { console.error("Error cargando producto:", err); }
 
       return {
         productDetailId: i.productDetail.id,
@@ -228,6 +335,7 @@ function volverTabla() {
   mostrarFormularioDevolucion.value = false
   transaccionSeleccionada.value = null
   devoluciones.value = []
+  busquedaItem.value = ''
 }
 
 function limpiarFormulario() {
@@ -256,7 +364,7 @@ async function guardarDevolucion() {
     }))
 
   const body = {
-    employeeId: 2, 
+    employeeId: 2,
     items: itemsParaEnviar,
     clientId: transaccionSeleccionada.value.client.id,
     saleId: transaccionSeleccionada.value.id
@@ -288,75 +396,269 @@ function formatoFecha(timestamp) {
 </script>
 
 <style scoped>
-.layout { display: flex; min-height: 100vh; background-color: #f0fdf4; }
-
-.devolucion-panel, .devolucion-formulario {
-  background-color: #f0fdf4; padding: 2rem; border-radius: 12px;
-  font-family: "Inter", sans-serif; flex: 1; display: flex;
-  flex-direction: column; gap: 1.5rem;
+/* REUTILIZACIÓN DE ESTILOS DE INVENTARIO */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f0fdf4;
 }
 
-.top-actions { display: flex; flex-direction: column; gap: 1rem; }
+.devolucion-panel,
+.devolucion-formulario {
+  flex: 1;
+  padding: 2rem;
+  font-family: "Inter", sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+h2 {
+  font-size: 1.6rem;
+  color: #166534;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+/* TOOLBAR ESTANDARIZADA */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.control-group label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.85rem;
+}
+
+.select-input,
+.search-input {
+  padding: 0.5rem;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  background-color: #fff;
+  outline: none;
+  font-size: 0.9rem;
+}
+
+.search-input {
+  width: 250px;
+}
+
+.btn-orden {
+  background-color: #34d399;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+  min-width: 130px;
+  font-size: 0.85rem;
+}
+
+.btn-orden:hover {
+  background-color: #059669;
+}
+
+.top-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .tasa-info {
-  text-align: left; font-size: 1.1rem; color: #065f46;
-  background-color: #d1fae5; padding: 0.6rem 1rem; border-radius: 8px;
-  border-left: 4px solid #10b981; width: fit-content;
+  text-align: left;
+  font-size: 1rem;
+  color: #065f46;
+  background-color: #d1fae5;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #10b981;
+  width: fit-content;
 }
+
 .venta-info {
-  text-align: left; font-size: 1rem; color: #065f46;
-  background-color: #ffffff; padding: 0.8rem 1rem; border-radius: 8px;
+  text-align: left;
+  font-size: 0.95rem;
+  color: #065f46;
+  background-color: #ffffff;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
   border: 1px solid #a7f3d0;
 }
-.divider { margin: 0 10px; color: #34d399; }
+
+.divider {
+  margin: 0 10px;
+  color: #34d399;
+}
 
 /* TABLAS */
-.tabla-transacciones, .tabla-productos-form {
-    width: 100%; border-collapse: collapse; font-size: 0.95rem;
-    background-color: #fff; border-radius: 8px; overflow: hidden;
+.tabla-transacciones,
+.tabla-productos-form {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  background-color: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
-.tabla-transacciones thead, .tabla-productos-form thead { background-color: #d1fae5; color: #065f46; }
-.tabla-transacciones td, th, .tabla-productos-form td, th { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; text-align: left; }
 
-/* ESTILOS DE PRODUCTO (Copiados del carrito) */
-.nombre-producto { font-weight: 600; color: #111827; line-height: 1.2; }
-.subtexto-marca { font-size: 0.75rem; color: #6b7280; }
+.tabla-transacciones thead,
+.tabla-productos-form thead {
+  background-color: #d1fae5;
+  color: #065f46;
+}
 
-.cargando-fila { opacity: 0.5; pointer-events: none; }
+.tabla-transacciones td,
+th,
+.tabla-productos-form td,
+th {
+  padding: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
 
-.col-fecha, .col-cliente, .col-nid { color: #111827; font-weight: 500; }
+.nombre-producto {
+  font-weight: 600;
+  color: #111827;
+}
 
-.fila-deshabilitada { background-color: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
-.tabla-transacciones tbody tr:not(.fila-deshabilitada) { cursor: pointer; }
-.tabla-transacciones tbody tr:not(.fila-deshabilitada):hover { background-color: #ecfdf5; }
+.subtexto-marca {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
 
-.col-precio-dual { min-width: 120px; }
-.bs-price { font-size: 1rem; color: #111827; }
-.usd-price { font-size: 0.85rem; color: #10b981; font-weight: 600; }
+.fila-deshabilitada {
+  background-color: #f8fafc;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.tabla-transacciones tbody tr:not(.fila-deshabilitada) {
+  cursor: pointer;
+}
+
+.tabla-transacciones tbody tr:not(.fila-deshabilitada):hover {
+  background-color: #f0fdf4;
+}
+
+.col-precio-dual {
+  min-width: 130px;
+}
+
+.bs-price {
+  font-size: 1rem;
+  color: #111827;
+}
+
+.usd-price {
+  font-size: 0.85rem;
+  color: #10b981;
+  font-weight: 600;
+}
 
 .total-pagar-dual {
-  text-align: right; padding: 1rem; background-color: #ffffff;
-  border-radius: 8px; border: 1px solid #a7f3d0; margin-bottom: 1rem;
+  text-align: right;
+  padding: 1.2rem;
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #a7f3d0;
+  margin-top: 1rem;
 }
-.total-label { font-size: 0.9rem; color: #6b7280; margin-bottom: 0.2rem; }
-.monto-bs { font-size: 1.4rem; color: #166534; font-weight: 700; }
-.monto-usd { font-size: 1.2rem; color: #10b981; font-weight: 700; }
 
-.bottom-actions-container { display: flex; justify-content: flex-end; gap: 12px; margin-top: 1rem; }
+.monto-bs {
+  font-size: 1.5rem;
+  color: #166534;
+  font-weight: 700;
+}
+
+.monto-usd {
+  font-size: 1.3rem;
+  color: #10b981;
+  font-weight: 700;
+}
+
+.bottom-actions-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 1rem;
+}
 
 .sku-tag {
-  background-color: #e2e8f0; color: #475569; padding: 0.3rem 0.6rem;
-  border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.85rem; border: 1px solid #cbd5e1;
+  background-color: #f1f5f9;
+  color: #475569;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: bold;
+  border: 1px solid #e2e8f0;
 }
-.select-cantidad { padding: 0.4rem; border-radius: 6px; border: 1px solid #a7f3d0; width: 70px; text-align: center; }
-.badge-devuelto { background-color: #fee2e2; color: #b91c1c; padding: 0.2rem 0.5rem; border-radius: 10px; font-size: 0.75rem; font-weight: bold; }
-.badge-items { background-color: #dcfce7; color: #166534; padding: 0.2rem 0.5rem; border-radius: 10px; font-size: 0.75rem; }
-.search-input { padding: 0.7rem; border: 1px solid #a7f3d0; border-radius: 8px; width: 300px; }
-.table-controls { display: flex; justify-content: flex-end; margin-bottom: 1rem; }
 
-button { padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-button.guardar { background-color: #10b981; color: white; }
-button.secundario { background-color: #d1fae5; color: #065f46; }
-button.cancelar { background-color: #f3f4f6; color: #374151; }
-button:hover:not(:disabled) { filter: brightness(0.9); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.select-cantidad {
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+  width: 75px;
+  text-align: center;
+}
+
+.badge-devuelto {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  padding: 0.3rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+}
+
+.badge-items {
+  background-color: #dcfce7;
+  color: #166534;
+  padding: 0.3rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button.guardar {
+  background-color: #10b981;
+  color: white;
+}
+
+button.secundario {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+button.cancelar {
+  background-color: #f3f4f6;
+  color: #374151;
+}
 </style>

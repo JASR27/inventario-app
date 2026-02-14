@@ -43,13 +43,14 @@ function handleSeleccion(usuario) {
   flex: 1;
   display: flex;
   justify-content: center; /* Centra horizontalmente */
-  padding: 2rem;
+  
   background-color: #f9f9f9;
 }
 
 /* Contenedor del formulario */
 .form-wrapper {
   width: 100%;
-  max-width: 700px;
+  background-color: #fff8f2;
+  border-radius: 20px;
 }
 </style>
