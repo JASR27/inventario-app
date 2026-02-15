@@ -122,6 +122,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js';
+
+const notificationStore = useNotificationStore();
 
 const usuarios = ref([])
 const busqueda = ref('')
@@ -135,12 +138,26 @@ const user = ref({
   id: null, firstName: '', lastName: '', nid: '', username: '', password: '', role: ''
 })
 
+// --- CARGA INICIAL ---
 onMounted(() => {
-  fetch('http://localhost:8080/employee')
-    .then(res => res.json())
-    .then(data => { usuarios.value = data })
-    .catch(err => console.error(err))
+  cargarUsuarios();
 })
+
+const cargarUsuarios = async () => {
+  try {
+    const res = await fetch('http://localhost:8080/employee')
+    if (!res.ok) throw new Error("Error al obtener la lista");
+    const data = await res.json()
+    usuarios.value = data
+  } catch (err) {
+    console.error(err)
+    notificationStore.addNotification(
+      "Error de Carga", 
+      "No se pudo sincronizar la lista de usuarios con el servidor.", 
+      "error"
+    );
+  }
+}
 
 const placeholderBusqueda = computed(() => {
   const ops = { todos: 'Buscar...', firstName: 'Nombre...', lastName: 'Apellido...', nid: 'NID...', username: 'Usuario...', role: 'Rol...' }
@@ -176,31 +193,57 @@ const usuariosFiltradosYOrdenados = computed(() => {
 })
 
 function seleccionar(usuario) {
+  // Clonamos y normalizamos el rol para el select (minúsculas)
   user.value = { ...usuario, role: usuario.role.toLowerCase() }
   mostrarTabla.value = false
   mostrarFormulario.value = true
 }
 
-function handleSubmit() {
+// --- EDICIÓN (PUT) ---
+async function handleSubmit() {
   const id = user.value.id
   const payload = { ...user.value, role: user.value.role.toUpperCase() }
 
-  fetch(`http://localhost:8080/employee/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-    .then(res => {
-      if (!res.ok) throw new Error()
-      alert("Usuario editado con éxito")
-      mostrarFormulario.value = false
-      mostrarTabla.value = true
-      resetForm()
-      return fetch('http://localhost:8080/employee')
+  try {
+    const res = await fetch(`http://localhost:8080/employee/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
-    .then(res => res.json())
-    .then(data => { usuarios.value = data })
-    .catch(err => console.error(err))
+
+    if (!res.ok) {
+      const errorMsg = await res.text();
+      if (res.status === 409) {
+        // Captura el conflicto de nombre de usuario desde tu EmployeeService
+        notificationStore.addNotification("Conflicto al Editar", errorMsg, "error");
+      } else {
+        notificationStore.addNotification("Error", "No se pudo actualizar el usuario.", "error");
+      }
+      return;
+    }
+
+    // ✅ Éxito en la edición
+    notificationStore.addNotification(
+      "Usuario Actualizado", 
+      `Los datos de "${payload.username}" se guardaron correctamente.`, 
+      "success"
+    );
+
+    mostrarFormulario.value = false
+    mostrarTabla.value = true
+    resetForm()
+    
+    // Recargar la tabla para ver los cambios
+    await cargarUsuarios();
+
+  } catch (err) {
+    console.error(err)
+    notificationStore.addNotification(
+      "Error de Red", 
+      "No hay conexión con el servidor para procesar la edición.", 
+      "error"
+    );
+  }
 }
 
 function resetForm() {

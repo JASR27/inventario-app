@@ -1,4 +1,5 @@
 <template>
+<NotificationToast />
   <div v-if="mostrarSidebar" class="layout">
     <component :is="sidebarActual" />
     <main class="contenido-principal">
@@ -14,6 +15,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import NotificationToast from './components/Generic Components/NotificationToast.vue'
 
 const route = useRoute()
 

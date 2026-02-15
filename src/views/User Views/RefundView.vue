@@ -9,18 +9,13 @@
         <div class="control-group">
           <label>Buscar por:</label>
           <select v-model="campoBusqueda" class="select-input">
-            
             <option value="todos">Todos los campos</option>
             <option value="fecha">Fecha (DD/MM/AAAA)</option>
             <option value="id">Nro. Venta</option>
             <option value="fullName">Cliente</option>
-            <option value="nid">NID / Cédula</option>            
+            <option value="nid">NID / Cédula</option>
             <option value="employee">Responsable</option>
-            
           </select>
-
-
-
 
           <input type="text" v-model="busqueda" :placeholder="placeholderBusqueda" class="search-input" />
         </div>
@@ -93,8 +88,6 @@
         </div>
       </div>
 
-      
-
       <table class="tabla-productos-form">
         <thead>
           <tr>
@@ -109,7 +102,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(producto, index) in itemsFiltrados" :key="index">
+          <tr v-for="(producto, index) in devoluciones" :key="index">
             <td><code class="sku-tag">{{ producto.sku }}</code></td>
             <td>
               <div class="nombre-producto">{{ producto.name }}</div>
@@ -148,7 +141,7 @@
       <div class="bottom-actions-container">
         <button class="cancelar" @click="volverTabla" :disabled="cargando">Volver</button>
         <button class="secundario" @click="limpiarFormulario" :disabled="cargando">Limpiar</button>
-        <button class="guardar" @click="guardarDevolucion" :disabled="cargando || totalDevolverUSD === 0">
+        <button class="guardar" @click="guardarDevolucion" :disabled="cargando">
           {{ cargando ? 'Procesando...' : 'Registrar Devolución' }}
         </button>
       </div>
@@ -158,14 +151,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
+
+const notificationStore = useNotificationStore()
 
 // --- ESTADOS ---
 const transacciones = ref([])
 const listaDevoluciones = ref([])
 const mostrarFormularioDevolucion = ref(false)
 const transaccionSeleccionada = ref(null)
-const devoluciones = ref([]) // Estos son los items del formulario
+const devoluciones = ref([])
 const cargando = ref(false)
 const cargandoDetalles = ref(null)
 const tasaCambio = ref(0)
@@ -176,17 +172,12 @@ const campoBusqueda = ref('todos')
 const criterioOrden = ref('createdAt')
 const ordenAscendente = ref(false)
 
-// Controles Tabla Formulario (Items)
-const busquedaItem = ref('')
-const criterioOrdenItem = ref('name')
-const ordenAscendenteItem = ref(true)
-
 onMounted(() => {
   fetchDatos()
   obtenerTasa()
 })
 
-// --- LÓGICA DE FILTRADO Y ORDEN (VISTA PRINCIPAL) ---
+// --- LÓGICA DE FILTRADO ---
 const placeholderBusqueda = computed(() => {
   const ops = {
     todos: 'Buscar en todos los campos...',
@@ -202,7 +193,6 @@ const placeholderBusqueda = computed(() => {
 const transaccionesFiltradas = computed(() => {
   let list = [...transacciones.value]
 
-  // --- BUSQUEDA ---
   if (busqueda.value) {
     const t = busqueda.value.toLowerCase()
     list = list.filter(tr => {
@@ -217,15 +207,13 @@ const transaccionesFiltradas = computed(() => {
       if (campoBusqueda.value === 'fullName') return cliente.includes(t)
       if (campoBusqueda.value === 'employee') return empleado.includes(t)
       if (campoBusqueda.value === 'fecha') return fecha.includes(t)
-      
+
       return idVenta.includes(t) || cliente.includes(t) || nid.includes(t) || empleado.includes(t) || fecha.includes(t)
     })
   }
 
-  // --- ORDENAMIENTO ---
   list.sort((a, b) => {
     let valA, valB
-
     if (criterioOrden.value === 'employee') {
       valA = `${a.employee.firstName} ${a.employee.lastName}`.toLowerCase()
       valB = `${b.employee.firstName} ${b.employee.lastName}`.toLowerCase()
@@ -237,7 +225,6 @@ const transaccionesFiltradas = computed(() => {
       valB = b[criterioOrden.value]
     }
 
-    // Prioridad: Ventas devueltas al final
     const devA = esVentaDevuelta(a.id)
     const devB = esVentaDevuelta(b.id)
     if (devA !== devB) return devA - devB
@@ -249,34 +236,14 @@ const transaccionesFiltradas = computed(() => {
   return list
 })
 
-// --- LÓGICA DE FILTRADO Y ORDEN (VISTA FORMULARIO) ---
-const itemsFiltrados = computed(() => {
-  let list = [...devoluciones.value]
-
-  if (busquedaItem.value) {
-    const term = busquedaItem.value.toLowerCase()
-    list = list.filter(i => i.name.toLowerCase().includes(term) || i.sku.toLowerCase().includes(term))
-  }
-
-  list.sort((a, b) => {
-    const valA = a[criterioOrdenItem.value]
-    const valB = b[criterioOrdenItem.value]
-    const res = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB
-    return ordenAscendenteItem.value ? res : -res
-  })
-
-  return list
-})
-
-// --- FUNCIONES EXISTENTES ---
+// --- FUNCIONES ---
 async function obtenerTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
-    if (res.ok) {
-      const texto = await res.text()
-      tasaCambio.value = parseFloat(texto)
-    }
-  } catch (e) { console.error("Error tasa:", e) }
+    if (res.ok) tasaCambio.value = parseFloat(await res.text())
+  } catch (e) {
+    notificationStore.addNotification("Error Tasa", "No se pudo obtener la tasa de cambio.", "error")
+  }
 }
 
 const totalDevolverUSD = computed(() =>
@@ -295,9 +262,7 @@ async function seleccionarTransaccion(transaccion) {
     const itemsPrometidos = transaccion.items.map(async (i) => {
       const partesSku = i.productDetail.sku.split('-');
       const productId = partesSku[1];
-
-      let nombreProducto = "Producto";
-      let marcaProducto = "---";
+      let nombreProducto = "Producto", marcaProducto = "---";
 
       try {
         const res = await fetch(`http://localhost:8080/product/${productId}`);
@@ -306,7 +271,7 @@ async function seleccionarTransaccion(transaccion) {
           nombreProducto = data.name;
           marcaProducto = data.brand?.name || "Sin Marca";
         }
-      } catch (err) { console.error("Error cargando producto:", err); }
+      } catch (err) { console.error(err) }
 
       return {
         productDetailId: i.productDetail.id,
@@ -324,22 +289,63 @@ async function seleccionarTransaccion(transaccion) {
     devoluciones.value = await Promise.all(itemsPrometidos);
     transaccionSeleccionada.value = transaccion;
     mostrarFormularioDevolucion.value = true;
+    notificationStore.addNotification("Venta Cargada", "Se han cargado los detalles del producto.", "info");
   } catch (error) {
-    alert("Error al procesar los detalles");
+    notificationStore.addNotification("Error", "No se pudo cargar la información de la venta.", "error");
   } finally {
     cargandoDetalles.value = null;
   }
 }
 
-function volverTabla() {
-  mostrarFormularioDevolucion.value = false
-  transaccionSeleccionada.value = null
-  devoluciones.value = []
-  busquedaItem.value = ''
-}
+async function guardarDevolucion() {
+  // 1. Obtenemos solo los items que el usuario marcó para devolver
+  const itemsParaEnviar = devoluciones.value
+    .filter(p => p.devolver > 0)
+    .map(p => ({
+      productDetailId: p.productDetailId,
+      quantity: p.devolver
+    }));
 
-function limpiarFormulario() {
-  devoluciones.value.forEach(p => (p.devolver = 0))
+  // 2. Notificación si intentan guardar estando todo en cero
+  if (itemsParaEnviar.length === 0) {
+    notificationStore.addNotification(
+      "Acción Requerida",
+      "No has seleccionado ningún producto para devolver. Por favor, aumenta la cantidad en al menos un ítem.",
+      "warning"
+    );
+    return; // Detenemos la ejecución aquí
+  }
+
+  // 3. Si hay items, procedemos con la carga
+  cargando.value = true;
+
+  try {
+    const body = {
+      employeeId: getEmployeeIdFromCookie(),
+      items: itemsParaEnviar,
+      clientId: transaccionSeleccionada.value.client.id,
+      saleId: transaccionSeleccionada.value.id
+    };
+
+    const response = await fetch('http://localhost:8080/devolution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (response.ok) {
+      notificationStore.addNotification("Devolución Exitosa", "Los productos han reingresado al inventario.", "success");
+      volverTabla();
+      await fetchDatos();
+    } else {
+      const errorText = await response.text();
+      notificationStore.addNotification("Error en Servidor", errorText, "error");
+    }
+  } catch (error) {
+    notificationStore.addNotification("Error de Red", "No se pudo conectar con el servidor.", "error");
+  } finally {
+    cargando.value = false;
+  }
 }
 
 async function fetchDatos() {
@@ -348,42 +354,27 @@ async function fetchDatos() {
       fetch('http://localhost:8080/sale'),
       fetch('http://localhost:8080/devolution')
     ])
-    const sales = await resSales.json()
-    const devs = await resDevs.json()
-    transacciones.value = Array.isArray(sales) ? sales : []
-    listaDevoluciones.value = Array.isArray(devs) ? devs : []
-  } catch (error) { console.error('Error:', error) }
+    transacciones.value = await resSales.json()
+    listaDevoluciones.value = await resDevs.json()
+  } catch (error) {
+    notificationStore.addNotification("Error", "No se pudo actualizar la lista de ventas.", "error")
+  }
 }
 
-async function guardarDevolucion() {
-  const itemsParaEnviar = devoluciones.value
-    .filter(p => p.devolver > 0)
-    .map(p => ({
-      productDetailId: p.productDetailId,
-      quantity: p.devolver
-    }))
+function getEmployeeIdFromCookie() {
+  const match = document.cookie.match(/userid=(\d+)/)
+  return match ? parseInt(match[1]) : 2 // Default 2 por seguridad
+}
 
-  const body = {
-    employeeId: 2,
-    items: itemsParaEnviar,
-    clientId: transaccionSeleccionada.value.client.id,
-    saleId: transaccionSeleccionada.value.id
-  }
+function volverTabla() {
+  mostrarFormularioDevolucion.value = false
+  transaccionSeleccionada.value = null
+  devoluciones.value = []
+}
 
-  cargando.value = true
-  try {
-    const response = await fetch('http://localhost:8080/devolution', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
-    if (response.ok) {
-      alert('Devolución registrada exitosamente');
-      volverTabla();
-      await fetchDatos();
-    }
-  } catch (error) { alert('Error de conexión'); }
-  finally { cargando.value = false }
+function limpiarFormulario() {
+  devoluciones.value.forEach(p => (p.devolver = 0))
+  notificationStore.addNotification("Limpieza", "Se reiniciaron las cantidades.", "info")
 }
 
 function formatoBs(v) {

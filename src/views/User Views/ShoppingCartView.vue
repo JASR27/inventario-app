@@ -36,7 +36,8 @@
             <th>Producto</th>
             <th>Color</th>
             <th>Talla</th>
-            <th>SKU</th> <th>Cantidad</th>
+            <th>SKU</th> 
+            <th>Cantidad</th>
             <th>Precio Unit.</th>
             <th>Subtotal</th>
           </tr>
@@ -52,13 +53,13 @@
             </td>
             <td>
               <select v-model="item.color" @change="seleccionarColor(item)" class="select-table">
-                <option disabled :value="null">Color</option>
+                <option :value="null" disabled>Color</option>
                 <option v-for="c in item.colores" :key="c" :value="c">{{ c }}</option>
               </select>
             </td>
             <td>
               <select v-model="item.talla" @change="seleccionarTalla(item)" :disabled="!item.color" class="select-table">
-                <option disabled :value="null">Talla</option>
+                <option :value="null" disabled>Talla</option>
                 <option v-for="t in item.tallasDisponibles" :key="t" :value="t">{{ t }}</option>
               </select>
             </td>
@@ -68,7 +69,7 @@
             </td>
             <td>
               <select v-model="item.cantidad" :disabled="!item.talla" class="select-table">
-                <option disabled :value="null">Cant.</option>
+                <option :value="null" disabled>Cant.</option>
                 <option v-for="n in item.cantidades" :key="n" :value="n">{{ n }}</option>
               </select>
             </td>
@@ -87,7 +88,7 @@
       </table>
 
       <div class="resumen-pago-dual">
-        <div class="pago-col">
+        <div class="pago-col separator">
           <div class="total-label">Total Venta:</div>
           <div class="total-monto">
             <span class="monto-primario">{{ totalGeneralUSD.toFixed(2) }}$</span>
@@ -111,7 +112,7 @@
       <div class="bottom-actions-container">
         <button class="secundario" @click="mostrarFormularioPago">Agregar Pago</button>
         <button class="secundario" @click="mostrarListaPagos">Ver Pagos ({{ pagos.length }})</button>
-        <button class="cancelar" @click="cancelarCarrito">Cancelar</button>
+        <button class="cancelar" @click="confirmarCancelacion">Cancelar</button>
         <button class="guardar" @click="guardarCarrito" :disabled="carrito.length === 0">Confirmar Venta</button>
       </div>
     </div>
@@ -125,12 +126,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
 import ProductSelector from '../../components/User Components/ProductSelector.vue'
 import PaymentForm from '../../components/User Components/PaymentForm.vue'
 import PaymentList from '../../components/User Components/PaymentList.vue'
 import ClientSelector from '../../components/User Components/ClientSelector.vue'
 
+const notificationStore = useNotificationStore()
 const carrito = ref([])
 const pagos = ref([])
 const clienteSeleccionado = ref(null)
@@ -146,7 +149,9 @@ async function obtenerTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
     if (res.ok) tasaCambio.value = parseFloat(await res.text())
-  } catch (e) { console.error("Error tasa:", e) }
+  } catch (e) { 
+    notificationStore.addNotification("Error Tasa", "No se pudo sincronizar la tasa del día.", "error")
+  }
 }
 
 async function agregarProducto(producto) {
@@ -155,7 +160,10 @@ async function agregarProducto(producto) {
     const data = await res.json()
     const listaVariantes = Array.isArray(data) ? data : (data.value || [])
     const variantesConStock = listaVariantes.filter(v => v.stock >= 1)
-    if (variantesConStock.length === 0) return alert("Sin stock disponible.")
+
+    if (variantesConStock.length === 0) {
+      return notificationStore.addNotification("Sin Stock", `El producto ${producto.name} está agotado.`, "warning")
+    }
 
     carrito.value.push({
       id: producto.id,
@@ -164,7 +172,7 @@ async function agregarProducto(producto) {
       sellingPrice: parseFloat(producto.sellingPrice),
       color: null, 
       talla: null, 
-      sku: '', // Campo para el SKU dinámico
+      sku: '', 
       cantidad: null, 
       productDetailId: null,
       colores: [...new Set(variantesConStock.map(v => v.color))],
@@ -172,25 +180,21 @@ async function agregarProducto(producto) {
       cantidades: [], 
       variantes: variantesConStock
     })
-  } catch (e) { alert('Error cargando producto.') }
+    notificationStore.addNotification("Carrito", "Producto añadido correctamente.", "success")
+  } catch (e) { 
+    notificationStore.addNotification("Error", "Fallo al obtener detalles del producto.", "error")
+  }
   mostrarSelector.value = false
 }
 
-// Función para generar el SKU basado en tu requerimiento
 function generarSKU(item) {
-  if (!item.color || !item.talla) {
-    item.sku = '';
-    return;
-  }
-  const prefijo = item.nombre.substring(0, 3).toUpperCase();
-  item.sku = `${prefijo}-${item.id}-${item.talla}-${item.color.toUpperCase()}`;
+  if (!item.color || !item.talla) return item.sku = ''
+  const prefijo = item.nombre.substring(0, 3).toUpperCase()
+  item.sku = `${prefijo}-${item.id}-${item.talla}-${item.color.toUpperCase()}`
 }
 
 function seleccionarColor(item) {
-  item.talla = null; 
-  item.cantidad = null; 
-  item.productDetailId = null;
-  item.sku = ''; // Limpiar SKU hasta que seleccione talla
+  item.talla = null; item.cantidad = null; item.productDetailId = null; item.sku = ''
   const tallas = item.variantes.filter(v => v.color === item.color).map(v => v.size)
   item.tallasDisponibles = [...new Set(tallas)].sort((a, b) => a - b)
 }
@@ -201,10 +205,11 @@ function seleccionarTalla(item) {
   if (v) {
     item.cantidades = Array.from({ length: v.stock }, (_, i) => i + 1)
     item.productDetailId = v.id
-    generarSKU(item); // Generar SKU al tener talla y color
+    generarSKU(item)
   }
 }
 
+// Computados para Totales
 const totalGeneralUSD = computed(() => carrito.value.reduce((acc, i) => acc + (i.sellingPrice * (i.cantidad || 0)), 0))
 const totalGeneralBS = computed(() => totalGeneralUSD.value * tasaCambio.value)
 const totalPagado = computed(() => pagos.value.reduce((acc, p) => acc + parseFloat(p.amount || 0), 0))
@@ -219,21 +224,49 @@ function getEmployeeIdFromCookie() {
   return match ? parseInt(match[1]) : null
 }
 
-function cancelarCarrito() { carrito.value = []; pagos.value = []; clienteSeleccionado.value = null; }
-const agregarPago = (p) => pagos.value.push(p)
-const eliminarPago = (i) => pagos.value.splice(i, 1)
-const eliminarProducto = (i) => carrito.value.splice(i, 1)
-const mostrarSelectorProductos = () => mostrarSelector.value = true
-const mostrarFormularioPago = () => mostrarPago.value = true
-const mostrarListaPagos = () => mostrarPagos.value = true
-const mostrarSelectorCliente = () => mostrarCliente.value = true
-const seleccionarCliente = (c) => { clienteSeleccionado.value = c; mostrarCliente.value = false; }
+// Acciones de UI con Notificaciones
+const eliminarProducto = (i) => {
+  carrito.value.splice(i, 1)
+  notificationStore.addNotification("Carrito", "Producto eliminado.", "info")
+}
+
+const eliminarPago = (i) => {
+  pagos.value.splice(i, 1)
+  notificationStore.addNotification("Pagos", "Pago removido de la lista.", "info")
+}
+
+const agregarPago = (p) => {
+  pagos.value.push(p)
+  notificationStore.addNotification("Éxito", "Pago registrado en el sistema.", "success")
+  mostrarPago.value = false
+}
+
+const seleccionarCliente = (c) => {
+  clienteSeleccionado.value = c
+  mostrarCliente.value = false
+  notificationStore.addNotification("Cliente", `Asignado: ${c.fullName}`, "info")
+}
+
+function confirmarCancelacion() {
+  if (carrito.value.length === 0) return
+  carrito.value = []; pagos.value = []; clienteSeleccionado.value = null
+  notificationStore.addNotification("Venta Cancelada", "Se ha limpiado el carrito por completo.", "info")
+}
 
 async function guardarCarrito() {
-  try {
-    if (carrito.value.length === 0 || !clienteSeleccionado.value) return alert('Seleccione cliente y productos')
-    if (totalPagado.value < (totalGeneralBS.value - 0.01)) return alert('Pago insuficiente')
+  if (carrito.value.length === 0) return notificationStore.addNotification("Error", "El carrito está vacío.", "warning")
+  if (!clienteSeleccionado.value) return notificationStore.addNotification("Error", "Debe seleccionar un cliente.", "warning")
+  
+  // Validar que todos tengan cantidad seleccionada
+  if (carrito.value.some(i => !i.productDetailId || !i.cantidad)) {
+    return notificationStore.addNotification("Incompleto", "Verifique color, talla y cantidad de los productos.", "warning")
+  }
 
+  if (diferencia.value > 0.01) {
+    return notificationStore.addNotification("Pago Insuficiente", `Faltan ${formatoBs(diferencia.value)} para completar la venta.`, "error")
+  }
+
+  try {
     const body = {
       employeeId: getEmployeeIdFromCookie(),
       clientId: clienteSeleccionado.value.id,
@@ -246,10 +279,21 @@ async function guardarCarrito() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     })
+
     if (!res.ok) throw new Error(await res.text())
-    alert('¡Venta exitosa!'); cancelarCarrito()
-  } catch (e) { alert("Error: " + e.message) }
+
+    notificationStore.addNotification("¡Venta Realizada!", "La transacción se guardó con éxito.", "success")
+    carrito.value = []; pagos.value = []; clienteSeleccionado.value = null
+  } catch (e) { 
+    notificationStore.addNotification("Error", "No se pudo procesar la venta: " + e.message, "error")
+  }
 }
+
+// Helpers de Apertura de Modales
+const mostrarSelectorProductos = () => mostrarSelector.value = true
+const mostrarFormularioPago = () => mostrarPago.value = true
+const mostrarListaPagos = () => mostrarPagos.value = true
+const mostrarSelectorCliente = () => mostrarCliente.value = true
 </script>
 
 <style scoped>

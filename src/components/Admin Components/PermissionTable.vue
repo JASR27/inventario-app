@@ -73,16 +73,17 @@
 </template>
 
 <script>
+import { useNotificationStore } from '../../store/useNotificationStore.js';
+
 export default {
   name: "PermissionTable",
   data() {
     return {
       permissions: [],
-      // Nuevos estados para filtros
       busqueda: '',
       campoBusqueda: 'todos',
       criterioOrden: 'startTime',
-      ordenAscendente: false, // Por defecto más recientes primero
+      ordenAscendente: false,
     };
   },
   computed: {
@@ -92,7 +93,7 @@ export default {
         requester: 'Nombre...',
         reason: 'Razón...',
         permissionStatus: 'Estado...',
-        fecha: 'Ej: 14/02/2026...' // Nuevo placeholder
+        fecha: 'Ej: 14/02/2026...'
       };
       return ops[this.campoBusqueda];
     },
@@ -101,27 +102,21 @@ export default {
         const texto = this.busqueda.toLowerCase().trim();
         if (!texto) return true;
 
-        // 1. Datos base
         const nombreCompleto = p.requester ? `${p.requester.firstName} ${p.requester.lastName}`.toLowerCase() : '';
         const mREQ = nombreCompleto.includes(texto);
         const mRES = (p.reason || '').toLowerCase().includes(texto);
         const mSTA = (p.permissionStatus || '').toLowerCase().includes(texto);
-
-        // 2. Lógica para Fecha (convertimos el timestamp a string formateado)
-        const fechaFormateada = this.formatDateOnly(p.startTime); // Ya es string DD/MM/AAAA
+        const fechaFormateada = this.formatDateOnly(p.startTime);
         const mFEC = fechaFormateada.includes(texto);
 
-        // 3. Retorno según el campo seleccionado
         if (this.campoBusqueda === 'requester') return mREQ;
         if (this.campoBusqueda === 'reason') return mRES;
         if (this.campoBusqueda === 'permissionStatus') return mSTA;
-        if (this.campoBusqueda === 'fecha') return mFEC; // Nuevo filtro
+        if (this.campoBusqueda === 'fecha') return mFEC;
 
-        // Si es "todos", incluimos también la fecha
         return mREQ || mRES || mSTA || mFEC;
       });
 
-      // ... (Mantén el resto de la lógica de ordenamiento igual)
       filtrados.sort((a, b) => {
         let vA, vB;
         if (this.criterioOrden === 'requester') {
@@ -145,18 +140,17 @@ export default {
     this.fetchPermissions();
   },
   methods: {
-    // ... Tus métodos actuales (formatDateOnly, formatTimeOnly, getEndTime, etc.) sin cambios
-    formatDateOnly(epochMillis) {
-      const d = new Date(Number(epochMillis));
+    formatDateOnly(epochSeconds) {
+      const d = new Date(Number(epochSeconds) * 1000); // Multiplicamos por 1000 para volver a milisegundos para Date()
       return d.toLocaleDateString([], { year: "numeric", month: "2-digit", day: "2-digit" });
     },
-    formatTimeOnly(epochMillis) {
-      const d = new Date(Number(epochMillis));
+    formatTimeOnly(epochSeconds) {
+      const d = new Date(Number(epochSeconds) * 1000);
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     },
-    getEndTime(startMillis, durationMinutes) {
-      // startMillis ya viene en milisegundos gracias al ajuste en fetchPermissions
-      return Number(startMillis) + (durationMinutes * 60000);
+    getEndTime(startSeconds, durationMinutes) {
+      // Cálculo basado en segundos
+      return Number(startSeconds) + (durationMinutes * 60);
     },
     getCookie(name) {
       const value = `; ${document.cookie}`;
@@ -165,6 +159,7 @@ export default {
       return null;
     },
     async fetchPermissions() {
+      const notificationStore = useNotificationStore();
       try {
         const res = await fetch("http://localhost:8080/absence");
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
@@ -172,33 +167,58 @@ export default {
 
         this.permissions = data.map((p) => ({
           ...p,
-          // ELIMINA LA DIVISIÓN POR 1000
-          // Simplemente asegúrate de que sea un número
+          // Guardamos en segundos para facilitar el ordenamiento numérico
           startTime: Math.floor(Number(p.startTime) / 1000),
         }));
       } catch (e) {
         console.error("Error cargando permisos:", e);
+        notificationStore.addNotification(
+          "Error de Carga", 
+          "No se pudieron obtener las solicitudes de permiso.", 
+          "error"
+        );
       }
     },
     async updatePermissionStatus(id, status) {
+      const notificationStore = useNotificationStore();
       const supervisorId = this.getCookie("userid");
+
       if (!supervisorId) {
-        alert("No se encontró el ID del supervisor en las cookies.");
+        notificationStore.addNotification(
+          "Sesión Inválida", 
+          "No se detectó el ID del supervisor. Por favor, reingrese al sistema.", 
+          "warning"
+        );
         return;
       }
+
       const body = { permissionStatus: status, supervisorId: parseInt(supervisorId) };
+      
       try {
         const res = await fetch(`http://localhost:8080/absence/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
+
         if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-        alert(`Permiso ${status === "APPROVED" ? "aprobado" : "rechazado"}.`);
+
+        // ✅ Notificación de éxito
+        const accion = status === "APPROVED" ? "aprobado" : "rechazado";
+        notificationStore.addNotification(
+          "Estado Actualizado", 
+          `El permiso ha sido ${accion} con éxito.`, 
+          "success"
+        );
+
         this.fetchPermissions();
       } catch (e) {
         console.error(`Error al actualizar permiso (${status}):`, e);
-        alert("No se pudo actualizar el estado del permiso.");
+        notificationStore.addNotification(
+          "Fallo de Acción", 
+          "Hubo un problema al comunicar la decisión al servidor.", 
+          "error"
+        );
       }
     },
     approvePermission(id) { this.updatePermissionStatus(id, "APPROVED"); },
@@ -206,7 +226,6 @@ export default {
   },
 };
 </script>
-
 <style scoped>
 /* Agrega estos estilos a tu bloque <> existente */
 

@@ -13,9 +13,7 @@
             <option value="name">Nombre</option>
             <option value="brand">Marca</option>
             <option value="description">Descripción</option>
-            <option value="sku">SKU</option>         
-            
-            
+            <option value="sku">SKU</option>
           </select>
           <input
             type="text"
@@ -56,6 +54,7 @@
             v-for="(producto, index) in productosFiltrados"
             :key="index"
             @click="verDetalle(producto)"
+            class="row-clickable"
           >
             <td>{{ producto.name }}</td>
             <td>{{ producto.brand?.name }}</td>
@@ -121,14 +120,16 @@
               <td class="sku-cell-small">{{ generarSKUVariante(item) }}</td>
               <td>{{ item.color }}</td>
               <td>{{ item.size }}</td>
-              <td class="stock-cell">{{ item.stock }}</td>
+              <td :class="['stock-cell', item.stock < 5 ? 'low-stock' : '']">
+                {{ item.stock }}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div class="bottom-actions">
-        <button class="secundario" @click="volverLista">Volver</button>
+        <button class="secundario" @click="volverLista">Volver a la lista</button>
       </div>
     </div>
   </div>
@@ -137,6 +138,9 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
+
+const notificationStore = useNotificationStore()
 
 // --- ESTADOS VISTA GENERAL ---
 const inventario = ref([])
@@ -251,20 +255,27 @@ const hayExistencias = computed(() => {
 })
 
 // --- ACCIONES ---
-function verDetalle(producto) {
+async function verDetalle(producto) {
   productoSeleccionado.value = producto
   mostrarDetalle.value = true
-  fetch(`http://localhost:8080/product/detail/${producto.id}`)
-    .then(res => res.json())
-    .then(data => {
-      // Manejo de la estructura de respuesta que mencionaste
-      if (data.value && Array.isArray(data.value)) {
-        variantes.value = data.value
-      } else {
-        variantes.value = []
+  
+  try {
+    const res = await fetch(`http://localhost:8080/product/detail/${producto.id}`)
+    if (!res.ok) throw new Error("No se pudo obtener el detalle del inventario")
+    
+    const data = await res.json()
+    if (data.value && Array.isArray(data.value)) {
+      variantes.value = data.value
+      if (data.value.length === 0) {
+        notificationStore.addNotification("Sin Existencias", "Este producto no tiene variantes registradas.", "info")
       }
-    })
-    .catch(() => (variantes.value = []))
+    } else {
+      variantes.value = []
+    }
+  } catch (e) {
+    variantes.value = []
+    notificationStore.addNotification("Error de Carga", e.message, "error")
+  }
 }
 
 function volverLista() {
@@ -279,12 +290,16 @@ function formato(valor) {
   return '$' + Number(valor).toFixed(2)
 }
 
-function fetchInventario() {
-  fetch('http://localhost:8080/product')
-    .then(res => res.json())
-    .then(data => {
-      inventario.value = Array.isArray(data) ? data : []
-    })
+async function fetchInventario() {
+  try {
+    const res = await fetch('http://localhost:8080/product')
+    if (!res.ok) throw new Error("Error al conectar con el servidor de inventario")
+    
+    const data = await res.json()
+    inventario.value = Array.isArray(data) ? data : []
+  } catch (e) {
+    notificationStore.addNotification("Error Crítico", "No se pudieron cargar los productos del inventario.", "error")
+  }
 }
 
 onMounted(fetchInventario)

@@ -148,10 +148,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
+
+const notificationStore = useNotificationStore()
 
 // --- ESTADOS ---
 const inventario = ref([])
-const brands = ref([])
 const busqueda = ref('')
 const campoBusqueda = ref('todos')
 const criterioOrden = ref('name')
@@ -180,7 +182,7 @@ function generarSKUVariante(variante, producto) {
   return `${base}-${talla}-${color}`
 }
 
-// --- COMPUTED: FILTROS Y ORDENAMIENTO (GENERAL) ---
+// --- COMPUTED: FILTROS Y ORDENAMIENTO ---
 const placeholderBusqueda = computed(() => {
   const ops = { 
     todos: 'Buscar en todo...', 
@@ -225,7 +227,6 @@ const productosFiltradosYOrdenados = computed(() => {
   return filtrados
 })
 
-// --- COMPUTED: FILTROS Y ORDENAMIENTO (DETALLE) ---
 const variantesFiltradasYOrdenadas = computed(() => {
   const vars = productoSeleccionado.value?.variantes || []
   const termino = busquedaVariante.value.toLowerCase()
@@ -248,14 +249,18 @@ const variantesFiltradasYOrdenadas = computed(() => {
 const fetchInventario = async () => {
   try {
     const res = await fetch('http://localhost:8080/product')
+    if (!res.ok) throw new Error()
     const data = await res.json()
     inventario.value = Array.isArray(data) ? data : []
-  } catch (e) { console.error(e) }
+  } catch (e) { 
+    notificationStore.addNotification("Error de Inventario", "No se pudo cargar la lista de productos.", "error")
+  }
 }
 
 const verExistencias = async (producto) => {
   try {
     const res = await fetch(`http://localhost:8080/product/detail/${producto.id}`)
+    if (!res.ok) throw new Error()
     const data = await res.json()
     const rawVars = Array.isArray(data.value) ? data.value : []
     
@@ -268,7 +273,9 @@ const verExistencias = async (producto) => {
     
     productoSeleccionado.value = producto
     mostrarDetalle.value = true
-  } catch (e) { alert("Error al cargar detalles") }
+  } catch (e) { 
+    notificationStore.addNotification("Error de Detalle", "No se pudieron obtener las existencias del producto.", "error")
+  }
 }
 
 const handleUpdate = async () => {
@@ -282,16 +289,28 @@ const handleUpdate = async () => {
         sellingPrice: productoEditado.value.sellingPrice
       })
     })
-    if (res.status === 204) {
-      alert("Precios actualizados");
+
+    if (res.status === 204 || res.ok) {
+      notificationStore.addNotification(
+        "Precios Actualizados", 
+        `El producto ${generarSKU(productoEditado.value)} se actualizó correctamente.`, 
+        "success"
+      );
       volverLista();
       fetchInventario();
+    } else {
+      throw new Error()
     }
-  } catch (e) { alert("Error al actualizar") }
+  } catch (e) { 
+    notificationStore.addNotification("Error de Actualización", "Hubo un fallo al intentar guardar los nuevos precios.", "error")
+  }
 }
 
 // --- NAVEGACIÓN ---
-const editarProducto = (p) => { productoEditado.value = { ...p }; mostrarFormulario.value = true; }
+const editarProducto = (p) => { 
+  productoEditado.value = { ...p }; 
+  mostrarFormulario.value = true; 
+}
 const cancelarEdicion = () => volverLista()
 const volverLista = () => {
   mostrarDetalle.value = false; mostrarFormulario.value = false

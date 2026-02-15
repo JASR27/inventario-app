@@ -44,7 +44,8 @@
             <th>Producto</th>
             <th>Color</th>
             <th>Talla</th>
-            <th>SKU</th> <th>Cantidad</th>
+            <th>SKU</th> 
+            <th>Cantidad</th>
             <th>Costo Unit.</th>
             <th>Subtotal</th>
           </tr>
@@ -121,6 +122,9 @@
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
 import ProductSelector from '../../components/User Components/ProductSelector.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
+
+const notificationStore = useNotificationStore()
 
 const carrito = ref([])
 const proveedores = ref([])
@@ -141,16 +145,23 @@ onMounted(() => {
 async function obtenerTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
-    if (res.ok) tasaCambio.value = parseFloat(await res.text())
-  } catch (e) { console.error("Error tasa:", e) }
+    if (res.ok) {
+      tasaCambio.value = parseFloat(await res.text())
+    }
+  } catch (e) { 
+    notificationStore.addNotification("Error de Conexión", "No se pudo sincronizar la tasa del día.", "error")
+  }
 }
 
 async function cargarProveedores() {
   try {
     const res = await fetch('http://localhost:8080/supplier')
+    if (!res.ok) throw new Error()
     const data = await res.json()
     proveedores.value = data || []
-  } catch (e) { console.error('Error proveedores:', e) }
+  } catch (e) { 
+    notificationStore.addNotification("Error", "No se pudo cargar la lista de proveedores.", "error")
+  }
 }
 
 function actualizarNid() {
@@ -166,13 +177,13 @@ function agregarProducto(producto) {
     buyingPrice: parseFloat(producto.buyingPrice),
     color: null,
     talla: null,
-    sku: '', // Campo para el SKU dinámico
+    sku: '',
     cantidad: 1
   })
   mostrarSelector.value = false
+  notificationStore.addNotification("Producto Añadido", `${producto.name} se agregó a la lista.`, "success")
 }
 
-// Nueva función: Generar SKU dinámicamente
 function generarSKU(item) {
   if (item.color && item.talla) {
     const prefix = item.nombre.substring(0, 3).toUpperCase()
@@ -204,44 +215,65 @@ function cancelarCarrito() {
 
 function limpiarCarrito() {
   carrito.value = []
+  notificationStore.addNotification("Carrito Limpio", "Se han removido todos los productos.", "info")
 }
 
 const mostrarSelectorProductos = () => mostrarSelector.value = true
-const eliminarProducto = (index) => carrito.value.splice(index, 1)
+const eliminarProducto = (index) => {
+  const nombre = carrito.value[index].nombre
+  carrito.value.splice(index, 1)
+  notificationStore.addNotification("Eliminado", `${nombre} fue removido.`, "info")
+}
 
 async function guardarCarrito() {
   try {
-    if (carrito.value.length === 0) return alert('El carrito está vacío')
-    if (!proveedorSeleccionado.value) return alert('Seleccione un proveedor')
-    if (!factura.value) return alert('Ingrese el número de factura')
+    // Validaciones
+    if (carrito.value.length === 0) {
+      return notificationStore.addNotification("Carrito Vacío", "Agregue productos antes de confirmar.", "warning")
+    }
+    if (!proveedorSeleccionado.value) {
+      return notificationStore.addNotification("Falta Proveedor", "Seleccione un proveedor para la reposición.", "warning")
+    }
+    if (!factura.value.trim()) {
+      return notificationStore.addNotification("Falta Factura", "Debe ingresar el número de factura o control.", "warning")
+    }
+
+    // Validar que todos los items tengan talla y color
+    const itemsIncompletos = carrito.value.some(i => !i.talla || !i.color)
+    if (itemsIncompletos) {
+      return notificationStore.addNotification("Datos Incompletos", "Asegúrese de seleccionar talla y color para todos los productos.", "warning")
+    }
 
     const employeeId = getEmployeeIdFromCookie()
     const body = {
       employeeId,
       supplierId: proveedorSeleccionado.value,
-      bill: factura.value, // Asegúrate de que tu backend reciba este campo
-      items: carrito.value
-        .filter(i => i.talla && i.color && i.cantidad)
-        .map(i => {
-          // Usamos el SKU ya generado en la fila
-          return {
-            productId: i.id,
-            sku: i.sku, 
-            size: i.talla,
-            color: i.color,
-            quantity: i.cantidad
-          }
-        })
+      bill: factura.value,
+      items: carrito.value.map(i => ({
+        productId: i.id,
+        sku: i.sku, 
+        size: i.talla,
+        color: i.color,
+        quantity: i.cantidad
+      }))
     }
+
     const res = await fetch("http://localhost:8080/purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     })
-    if (!res.ok) throw new Error(await res.text())
-    alert('¡Reposición guardada exitosamente!')
+
+    if (!res.ok) {
+      const errorMsg = await res.text()
+      throw new Error(errorMsg || "Error al procesar la reposición")
+    }
+
+    notificationStore.addNotification("¡Éxito!", "La reposición de inventario se registró correctamente.", "success")
     cancelarCarrito()
-  } catch (e) { alert("Error: " + e.message) }
+  } catch (e) { 
+    notificationStore.addNotification("Error de Registro", e.message, "error")
+  }
 }
 </script>
 

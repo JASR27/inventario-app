@@ -6,41 +6,41 @@
       <h2 class="titulo-central">Historial de {{ labelPlural }}</h2>
 
       <div class="toolbar-tabla">
-  <div class="control-group">
-    <label>Tipo:</label>
-    <select v-model="tipoFiltro" class="select-input-toolbar" @change="fetchDatos">
-      <option value="sale">Ventas</option>
-      <option value="purchase">Reposiciones</option>
-      <option value="devolution">Devoluciones</option>
-      <option value="entry_adjustment">Ajustes Entrada (+)</option>
-      <option value="exit_adjustment">Ajustes Salida (-)</option>
-    </select>
-  </div>
+        <div class="control-group">
+          <label>Tipo:</label>
+          <select v-model="tipoFiltro" class="select-input-toolbar" @change="fetchDatos">
+            <option value="sale">Ventas</option>
+            <option value="purchase">Reposiciones</option>
+            <option value="devolution">Devoluciones</option>
+            <option value="entry_adjustment">Ajustes Entrada (+)</option>
+            <option value="exit_adjustment">Ajustes Salida (-)</option>
+          </select>
+        </div>
 
-  <div class="control-group">
-    <label>Buscar por:</label>
-    <select v-model="campoBusqueda" class="select-input-toolbar">
-      <option value="todos">Todos</option>
-      <option value="fecha">Fecha</option>
-      <option value="sujeto">{{ labelSujeto }}</option>
-      <option value="empleado">Responsable</option>
-      
-    </select>
-    <input type="text" v-model="busqueda" placeholder="Buscar..." class="search-input-toolbar" />
-  </div>
+        <div class="control-group">
+          <label>Buscar por:</label>
+          <select v-model="campoBusqueda" class="select-input-toolbar">
+            <option value="todos">Todos</option>
+            <option value="fecha">Fecha</option>
+            <option value="sujeto">{{ labelSujeto }}</option>
+            <option value="empleado">Responsable</option>
 
-  <div class="control-group">
-    <label>Ordenar:</label>
-    <select v-model="criterioOrden" class="select-input-toolbar">
-      <option value="createdAt">Fecha</option>
-      <option value="sujeto">{{ labelSujeto }}</option>
-      <option value="itemsCount">Cant. Items</option>
-    </select>
-    <button @click="ordenAscendente = !ordenAscendente" class="btn-orden-tabla">
-      {{ ordenAscendente ? 'Ascendente ▲' : 'Descendente ▼' }}
-    </button>
-  </div>
-</div>
+          </select>
+          <input type="text" v-model="busqueda" placeholder="Buscar..." class="search-input-toolbar" />
+        </div>
+
+        <div class="control-group">
+          <label>Ordenar:</label>
+          <select v-model="criterioOrden" class="select-input-toolbar">
+            <option value="createdAt">Fecha</option>
+            <option value="sujeto">{{ labelSujeto }}</option>
+            <option value="itemsCount">Cant. Items</option>
+          </select>
+          <button @click="ordenAscendente = !ordenAscendente" class="btn-orden-tabla">
+            {{ ordenAscendente ? 'Ascendente ▲' : 'Descendente ▼' }}
+          </button>
+        </div>
+      </div>
 
       <div class="tabla-contenedor">
         <table class="tabla-elegante">
@@ -96,8 +96,15 @@
               transaccionSeleccionada.supplier?.name }}</p>
             <p><span>Documento:</span> {{ transaccionSeleccionada.client?.nid || transaccionSeleccionada.supplier?.nid
               }}</p>
-            <p v-if="transaccionSeleccionada.client?.address"><span>Dirección:</span> {{
-              transaccionSeleccionada.client.address }}</p>
+
+            <p v-if="transaccionSeleccionada.client?.address">
+              <span>Dirección:</span> {{ transaccionSeleccionada.client.address }}
+            </p>
+
+            <p v-if="transaccionSeleccionada.bill">
+              <span>Nro. Factura:</span>
+              <strong style="color: #f97316;">{{ transaccionSeleccionada.bill }}</strong>
+            </p>
           </div>
         </div>
       </div>
@@ -152,15 +159,18 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
+
+const notificationStore = useNotificationStore()
 
 const transacciones = ref([])
 const busqueda = ref('')
 const tipoFiltro = ref('sale')
 const mostrarDetalle = ref(false)
 const transaccionSeleccionada = ref(null)
-const campoBusqueda = ref('todos') // Nuevo: para elegir dónde buscar
-const criterioOrden = ref('createdAt') // Nuevo: campo por el que se ordena
-const ordenAscendente = ref(false) // Nuevo: dirección del orden
+const campoBusqueda = ref('todos')
+const criterioOrden = ref('createdAt')
+const ordenAscendente = ref(false)
 
 // Labels dinámicos
 const labelSingular = computed(() => ({ sale: 'Venta', purchase: 'Reposición', devolution: 'Devolución', entry_adjustment: 'Ajuste de Entrada', exit_adjustment: 'Ajuste de Salida' }[tipoFiltro.value]))
@@ -168,11 +178,13 @@ const labelPlural = computed(() => ({ sale: 'Ventas', purchase: 'Reposiciones', 
 const labelSujeto = computed(() => (['sale', 'devolution'].includes(tipoFiltro.value)) ? 'Cliente' : (tipoFiltro.value === 'purchase' ? 'Proveedor' : 'Motivo'))
 const tieneMonto = computed(() => !tipoFiltro.value.includes('adjustment'))
 
-// Función de carga de datos
+// Función de carga de datos con Notificaciones
 async function fetchDatos() {
   let endpoint = tipoFiltro.value.includes('adjustment') ? 'adjustment' : tipoFiltro.value
   try {
     const res = await fetch(`http://localhost:8080/${endpoint}`)
+    if (!res.ok) throw new Error(`Error ${res.status}`)
+
     const data = await res.json()
     let lista = Array.isArray(data) ? data : []
 
@@ -182,12 +194,16 @@ async function fetchDatos() {
     transacciones.value = lista
   } catch (e) {
     transacciones.value = []
+    notificationStore.addNotification(
+      "Error de Conexión",
+      `No se pudo obtener el historial de ${labelPlural.value.toLowerCase()}.`,
+      "error"
+    )
   }
 }
 
-// BÚSQUEDA GLOBAL MEJORADA
+// BÚSQUEDA Y ORDENAMIENTO
 const transaccionesFiltradas = computed(() => {
-  // 1. Filtrado
   let resultado = transacciones.value.filter(t => {
     const q = busqueda.value.toLowerCase().trim()
     if (!q) return true
@@ -204,7 +220,6 @@ const transaccionesFiltradas = computed(() => {
     return fFecha || fSujeto || fEmpleado || fSku
   })
 
-  // 2. Ordenamiento
   resultado.sort((a, b) => {
     let aVal, bVal
     if (criterioOrden.value === 'createdAt') {
@@ -229,8 +244,15 @@ const obtenerSujeto = (t) => t.client?.fullName || t.supplier?.name || t.reason 
 const formato = (v) => '$' + parseFloat(v).toFixed(2)
 const formatoFecha = (ts) => new Date(ts).toLocaleString()
 const totalProductos = (items) => items.reduce((acc, i) => acc + Math.abs(i.quantity), 0)
-const verDetalle = (t) => { transaccionSeleccionada.value = t; mostrarDetalle.value = true; }
-const volverLista = () => { mostrarDetalle.value = false; }
+
+const verDetalle = (t) => {
+  transaccionSeleccionada.value = t;
+  mostrarDetalle.value = true;
+}
+
+const volverLista = () => {
+  mostrarDetalle.value = false;
+}
 
 onMounted(fetchDatos)
 </script>
@@ -289,13 +311,21 @@ onMounted(fetchDatos)
   margin-bottom: 1.5rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
 }
-.control-group { display: flex; align-items: center; gap: 0.5rem; }
-.select-input-toolbar, .search-input-toolbar {
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.select-input-toolbar,
+.search-input-toolbar {
   padding: 0.5rem;
   border: 1px solid #fdba74;
   border-radius: 6px;
   background: white;
 }
+
 .btn-orden-tabla {
   background-color: #f97316;
   color: white;
@@ -390,8 +420,14 @@ td {
 }
 
 .sku-code {
-  background-color: #e2e8f0; color: #475569; padding: 0.3rem 0.6rem;
-  border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 0.85rem; border: 1px solid #cbd5e1;
+  background-color: #e2e8f0;
+  color: #475569;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
 }
 
 .espec-tag {
@@ -507,12 +543,13 @@ td {
 
 .acciones-footer {
   display: flex;
-  justify-content: flex-end; /* Empuja el contenido a la derecha */
+  justify-content: flex-end;
+  /* Empuja el contenido a la derecha */
   margin-top: 2rem;
 }
 
 .btn-volver {
-  background-color: #f3f4f6; 
+  background-color: #f3f4f6;
   color: #374151;
   border: none;
   padding: 0.8rem 1.5rem;
@@ -523,7 +560,8 @@ td {
 }
 
 .btn-volver:hover {
-  background-color: #e5e7eb; /* Un gris un poco más oscuro al pasar el mouse */
+  background-color: #e5e7eb;
+  /* Un gris un poco más oscuro al pasar el mouse */
   color: #111827;
 }
 

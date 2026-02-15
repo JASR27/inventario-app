@@ -3,12 +3,23 @@
   <div class="bienvenida-marco">
     <h1>Bienvenido al sistema</h1>
 
-    <img src="../../assets/image.png" alt="Imagen de bienvenida" class="imagen" />
+    <div class="imagen-contenedor">
+      <img src="../../assets/image.png" alt="Imagen de bienvenida" class="imagen" />
+    </div>
 
     <div class="tasa">
-      <h2>Tasa oficial BCV del día</h2>
-      <p v-if="tasa">1 USD = {{ tasa }} VES</p>
-      <p v-else>Cargando tasa...</p>
+      <h2 class="tasa-titulo">Tasa oficial BCV del día</h2>
+      
+      <div v-if="tasa" class="tasa-display">
+        <span class="moneda-label">1 USD =</span>
+        <span class="moneda-valor">{{ tasa }} VES</span>
+      </div>
+      
+      <div v-else class="tasa-cargando">
+        <div class="spinner-simple"></div>
+        <p>Sincronizando con el servidor...</p>
+      </div>
+      
     </div>
   </div>
 </template>
@@ -16,17 +27,32 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarUser.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 
+const notificationStore = useNotificationStore()
 const tasa = ref(null)
 
 onMounted(async () => {
   try {
-    const res = await fetch('https://ve.dolarapi.com/v1/dolares')
+    // Consumimos el servicio interno para mantener paridad con el Admin
+    const res = await fetch('http://localhost:8080/currency/exchange_rate')
+    
+    if (!res.ok) throw new Error("No se pudo obtener la tasa")
+    
     const data = await res.json()
-    const bcv = data.find(item => item.fuente === 'oficial')
-    tasa.value = bcv?.promedio?.toFixed(2)
+    
+    // Validamos si la data es el objeto { price: ... } o el valor directo
+    const valor = typeof data === 'object' ? data.price : data
+    
+    if (valor) {
+      tasa.value = parseFloat(valor).toFixed(2)
+    }
   } catch (error) {
-    console.error('Error al obtener la tasa BCV:', error)
+    notificationStore.addNotification(
+      "Error de Sincronización", 
+      "No se pudo cargar la tasa cambiaria desde el servidor local.", 
+      "error"
+    )
   }
 })
 </script>

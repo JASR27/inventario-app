@@ -10,14 +10,10 @@
           <div class="ajuste-detalles">
             <div class="input-group">
               <label>Razón del Ajuste</label>
-              <input 
-                type="text" 
-                v-model="ajuste" 
-                maxlength="50"
-                placeholder="Ej: Mercancía dañada, error de conteo..." 
-              />
+              <input type="text" v-model="ajuste" maxlength="50"
+                placeholder="Ej: Mercancía dañada, error de conteo..." />
             </div>
-            
+
             <div class="input-group-tipo">
               <label>Tipo de Ajuste</label>
               <select v-model="tipoAjuste" class="select-tipo">
@@ -26,7 +22,7 @@
               </select>
             </div>
           </div>
-          
+
           <button class="secundario btn-derecha" @click="mostrarSelectorProductos">
             Agregar Producto
           </button>
@@ -60,7 +56,8 @@
               </select>
             </td>
             <td>
-              <select v-model="item.talla" @change="seleccionarTalla(item)" :disabled="!item.color" class="select-table">
+              <select v-model="item.talla" @change="seleccionarTalla(item)" :disabled="!item.color"
+                class="select-table">
                 <option :value="null" disabled>Talla</option>
                 <option v-for="t in item.tallasDisponibles" :key="t" :value="t">{{ t }}</option>
               </select>
@@ -71,14 +68,9 @@
             </td>
             <td>
               <div class="cantidad-container">
-                <input 
-                  type="number" 
-                  v-model.number="item.cantidad" 
-                  min="1"
-                  max="100" 
-                  class="input-cantidad" 
-                  :disabled="!item.talla" 
-                />
+                <input type="number" v-model.number="item.cantidad" min="1"
+                  :max="tipoAjuste === 'salida' ? obtenerStockActual(item) : 9999" class="input-cantidad"
+                  :disabled="!item.talla" @input="validarExcesoStock(item)" />
                 <small v-if="item.talla && tipoAjuste === 'salida'" class="stock-info">
                   Disp: {{ obtenerStockActual(item) }}
                 </small>
@@ -96,12 +88,8 @@
       </div>
     </div>
 
-    <ProductSelector 
-      v-if="mostrarSelector" 
-      modo="ajuste" 
-      @seleccionar="agregarProducto"
-      @cerrar="mostrarSelector = false" 
-    />
+    <ProductSelector v-if="mostrarSelector" modo="ajuste" @seleccionar="agregarProducto"
+      @cerrar="mostrarSelector = false" />
   </div>
 </template>
 
@@ -109,6 +97,9 @@
 import { ref } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue'
 import ProductSelector from '../../components/Admin Components/ProductSelector.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
+
+const notificationStore = useNotificationStore()
 
 const carrito = ref([])
 const ajuste = ref('')
@@ -138,7 +129,7 @@ async function agregarProducto(producto) {
       variantes: variantes
     })
   } catch (e) {
-    alert('Error al obtener detalles del producto')
+    notificationStore.addNotification("Error de Datos", "No se pudieron cargar los detalles de este producto.", "error")
   }
   mostrarSelector.value = false
 }
@@ -164,35 +155,72 @@ function obtenerStockActual(item) {
   return v ? v.stock : 0
 }
 
-async function guardarCarrito() {
-  try {
-    const razonLimpia = ajuste.value.trim()
+function validarExcesoStock(item) {
+  if (tipoAjuste.value === 'salida') {
+    const stockMax = obtenerStockActual(item);
+    if (item.cantidad > stockMax) {
+      item.cantidad = stockMax; // Forzamos el valor al máximo disponible
+      
+      notificationStore.addNotification(
+        "Límite alcanzado", 
+        `Solo hay ${stockMax} unidades disponibles de este producto.`, 
+        "warning"
+      );
+    }
+  }
+}
 
-    // 1. Validar Razón
-    if (!razonRegex.test(razonLimpia)) {
-      return alert('Error: La razón debe tener entre 6 y 50 caracteres y solo permite letras, números, espacios y (. _ -)')
+async function guardarCarrito() {
+  const razonLimpia = ajuste.value.trim()
+
+  // 1. Validar Razón
+  if (!razonRegex.test(razonLimpia)) {
+    return notificationStore.addNotification(
+      "Razón Inválida",
+      "La razón debe tener entre 6 y 50 caracteres (solo letras, números y . _ -)",
+      "warning"
+    )
+  }
+
+  // 2. Validar Carrito y Stock
+  for (const item of carrito.value) {
+    if (!item.productDetailId) {
+      return notificationStore.addNotification(
+        "Datos Incompletos",
+        `Seleccione color y talla para: ${item.nombre}`,
+        "warning"
+      )
     }
 
-    // 2. Validar Carrito y Stock
-    for (const item of carrito.value) {
-      if (!item.productDetailId) {
-        return alert(`Seleccione color y talla para: ${item.nombre}`)
-      }
-      
-      if (item.cantidad <= 0) {
-        return alert(`La cantidad para ${item.nombre} debe ser mayor a 0`)
-      }
+    if (item.cantidad <= 0) {
+      return notificationStore.addNotification(
+        "Cantidad Inválida",
+        `La cantidad para ${item.nombre} debe ser mayor a 0`,
+        "warning"
+      )
+    }
 
-      if (tipoAjuste.value === 'salida') {
-        const stockActual = obtenerStockActual(item)
-        if (item.cantidad > stockActual) {
-          return alert(`Stock insuficiente para ${item.nombre}. \nDisponible: ${stockActual} \nSolicitado: ${item.cantidad}`)
-        }
+    if (tipoAjuste.value === 'salida') {
+      const stockActual = obtenerStockActual(item)
+      if (item.cantidad > stockActual) {
+        return notificationStore.addNotification(
+          "Stock Insuficiente",
+          `No puedes retirar ${item.cantidad} unidades de ${item.nombre}. Disponible: ${stockActual}`,
+          "error"
+        )
       }
+    }
+  }
+
+  // 3. Preparar Envío
+  try {
+    const employeeId = getEmployeeIdFromCookie()
+    if (!employeeId) {
+      return notificationStore.addNotification("Sesión Expirada", "No se encontró el ID del responsable. Reingresa al sistema.", "error")
     }
 
     const body = {
-      employeeId: getEmployeeIdFromCookie(),
+      employeeId: employeeId,
       reason: razonLimpia,
       items: carrito.value.map(i => ({
         productDetailId: i.productDetailId,
@@ -207,11 +235,15 @@ async function guardarCarrito() {
     })
 
     if (!res.ok) throw new Error(await res.text())
-    
-    alert('¡Ajuste procesado con éxito!')
+
+    notificationStore.addNotification(
+      "Ajuste Registrado",
+      `Se ha procesado el ajuste de ${tipoAjuste.value} correctamente.`,
+      "success"
+    )
     cancelarCarrito()
   } catch (e) {
-    alert("Error: " + e.message)
+    notificationStore.addNotification("Error de Sistema", "No se pudo procesar el ajuste en el servidor.", "error")
   }
 }
 
@@ -230,59 +262,168 @@ function cancelarCarrito() {
 </script>
 
 <style scoped>
-.layout { display: flex; min-height: 100vh; background-color: #fff7ed; }
-.carrito-panel {
-  background-color: #fff7ed; padding: 2rem; border-radius: 12px;
-  font-family: "Inter", sans-serif; flex: 1; display: flex;
-  flex-direction: column; gap: 1.5rem;
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #fff7ed;
 }
 
-h2 { font-size: 1.5rem; color: #9a3412; text-align: center; }
+.carrito-panel {
+  background-color: #fff7ed;
+  padding: 2rem;
+  border-radius: 12px;
+  font-family: "Inter", sans-serif;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  color: #9a3412;
+  text-align: center;
+}
 
 .ajuste-info-box {
-  display: flex; align-items: center; gap: 1.5rem;
-  background-color: #ffffff; padding: 1.2rem; border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background-color: #ffffff;
+  padding: 1.2rem;
+  border-radius: 8px;
   border: 1px solid #fdba74;
 }
 
-.ajuste-detalles { display: flex; gap: 1.5rem; flex-grow: 1; }
-.input-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 2; }
-.input-group-tipo { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
-.input-group label, .input-group-tipo label { font-size: 0.85rem; font-weight: 700; color: #9a3412; }
-
-.input-group input, .select-tipo {
-  padding: 0.6rem; border-radius: 6px; border: 1px solid #fdba74;
-  outline: none; font-family: inherit; font-size: 0.95rem;
+.ajuste-detalles {
+  display: flex;
+  gap: 1.5rem;
+  flex-grow: 1;
 }
 
-.btn-derecha { margin-left: auto; }
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 2;
+}
+
+.input-group-tipo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.input-group label,
+.input-group-tipo label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.input-group input,
+.select-tipo {
+  padding: 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.btn-derecha {
+  margin-left: auto;
+}
 
 .tabla-productos {
-  width: 100%; border-collapse: collapse; background-color: #ffffff;
-  border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.tabla-productos th { background-color: #ffedd5; padding: 0.85rem; color: #9a3412; text-align: left; }
-.tabla-productos td { padding: 0.85rem; border-bottom: 1px solid #fed7aa; color: #431407; }
+.tabla-productos th {
+  background-color: #ffedd5;
+  padding: 0.85rem;
+  color: #9a3412;
+  text-align: left;
+}
+
+.tabla-productos td {
+  padding: 0.85rem;
+  border-bottom: 1px solid #fed7aa;
+  color: #431407;
+}
 
 .sku-badge {
-  background-color: #e2e8f0; color: #475569; padding: 0.3rem 0.6rem;
-  border-radius: 4px; font-family: 'Courier New', monospace; font-weight: bold; font-size: 0.85rem;
+  background-color: #e2e8f0;
+  color: #475569;
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 0.85rem;
   border: 1px solid #cbd5e1;
 }
 
-.subtexto-marca { font-size: 0.75rem; color: #6b7280; }
+.subtexto-marca {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
 
-.cantidad-container { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.input-cantidad { width: 70px; text-align: center; padding: 0.4rem; border-radius: 6px; border: 1px solid #fdba74; }
-.stock-info { font-size: 0.7rem; color: #ea580c; font-weight: 600; }
+.cantidad-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
 
-.select-table { padding: 0.3rem; border-radius: 6px; border: 1px solid #fdba74; font-size: 0.9rem; min-width: 110px; }
+.input-cantidad {
+  width: 70px;
+  text-align: center;
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+}
 
-.bottom-actions-container { display: flex; justify-content: flex-end; gap: 12px; margin-top: 1rem; }
+.stock-info {
+  font-size: 0.7rem;
+  color: #ea580c;
+  font-weight: 600;
+}
 
-button { padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.2s; }
-button.guardar { background-color: #f97316; color: white; }
+.select-table {
+  padding: 0.3rem;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  font-size: 0.9rem;
+  min-width: 110px;
+}
+
+.bottom-actions-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 1rem;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button.guardar {
+  background-color: #f97316;
+  color: white;
+}
+
 button.secundario {
   background-color: #fcd34d;
   color: #78350f;
@@ -292,12 +433,28 @@ button.secundario {
 button.secundario:hover {
   background-color: #fbbf24;
 }
-button.cancelar { background-color: #f3f4f6; color: #374151; }
-button.btn-eliminar { 
-  background-color: #fee2e2; color: #991b1b; padding: 0; 
-  width: 30px; height: 30px; border-radius: 50%; font-size: 1.2rem; 
+
+button.cancelar {
+  background-color: #f3f4f6;
+  color: #374151;
 }
 
-button:hover:not(:disabled) { filter: brightness(0.95); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.btn-eliminar {
+  background-color: #fee2e2;
+  color: #991b1b;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 </style>

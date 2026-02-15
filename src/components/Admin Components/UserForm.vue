@@ -55,6 +55,8 @@
 </template>
 
 <script>
+import { useNotificationStore } from '../../store/useNotificationStore.js';
+
 export default {
   name: "UserForm",
   data() {
@@ -70,67 +72,80 @@ export default {
     };
   },
   methods: {
-    handleSubmit() {
-      // Regex de validación
-      // Permite letras y espacios (Mínimo 4, máximo 20)
+    async handleSubmit() {
+      const notificationStore = useNotificationStore();
+
+      // Regex de validación (Mismos criterios que el Backend)
       const nameRegex = /^[A-Za-z ]{4,20}$/;
-
-      // El guion al final para que sea tomado como un carácter literal
-      const nidRegex = /^[A-Za-z0-9._-]{4,20}$/;
-
-      // El guion al final
+      const nidRegex = /^[A-Za-z0-9._-]{6,20}$/; // Ajustado a min 6 como tus inputs
       const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/;
-
-      // Escapamos el guion con \- para evitar cualquier conflicto con los símbolos especiales
       const passwordRegex = /^[A-Za-z0-9._\-#$&*@]{6,20}$/;
 
+      // --- Validaciones de Frontend ---
       if (!nameRegex.test(this.user.firstName)) {
-        alert("El nombre debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.");
+        notificationStore.addNotification("Dato Inválido", "El nombre debe tener entre 4 y 20 caracteres.", "warning");
         return;
       }
       if (!nameRegex.test(this.user.lastName)) {
-        alert("El apellido debe tener entre 4 y 20 caracteres y solo puede contener letras y espacios.");
+        notificationStore.addNotification("Dato Inválido", "El apellido debe tener entre 4 y 20 caracteres.", "warning");
         return;
       }
       if (!nidRegex.test(this.user.nid)) {
-        alert("El NID debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_");
+        notificationStore.addNotification("Error de Formato", "El NID debe tener entre 6 y 20 caracteres.", "warning");
         return;
       }
-      if (!usernameRegex.test(this.user.username)) {
-        alert("El usuario debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_");
-        return;
-      }
-      if (!passwordRegex.test(this.user.password)) {
-        alert("La contraseña debe tener entre 6 y 20 caracteres y puede contener letras, números y .-_ $#&*@");
+      if (!this.user.role) {
+        notificationStore.addNotification("Campo Requerido", "Por favor, selecciona un rol.", "warning");
         return;
       }
 
-      // Normalizar el rol en mayúsculas si el backend lo espera así
+      // Preparación de datos
       const payload = {
         ...this.user,
         role: this.user.role.toUpperCase(),
       };
 
-      fetch("http://localhost:8080/employee", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("Error al registrar el usuario");
-          return response.json();
-        })
-        .then((data) => {
-          alert(`Usuario "${data.username}" registrado con éxito`);
-          this.resetForm();
-        })
-        .catch((error) => {
-          console.error("Error:", error);
-          alert("Hubo un problema al registrar el usuario.");
+      // --- Envío al Backend ---
+      try {
+        const response = await fetch("http://localhost:8080/employee", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         });
+
+        // Manejo de Errores del Servidor (409 Conflict, etc)
+        if (!response.ok) {
+          const errorMessage = await response.text(); 
+          
+          if (response.status === 409) {
+            // El mensaje viene directamente de tu EmployeeService de Spring Boot
+            notificationStore.addNotification("Conflicto de Datos", errorMessage, "error");
+          } else {
+            notificationStore.addNotification("Error de Sistema", "No se pudo procesar el registro.", "error");
+          }
+          return; // Detenemos aquí
+        }
+
+        // ✅ Registro Exitoso
+        const data = await response.json();
+        notificationStore.addNotification(
+          "Registro Exitoso", 
+          `El usuario "${data.username}" ha sido creado correctamente.`, 
+          "success"
+        );
+        this.resetForm();
+
+      } catch (error) {
+        // Manejo de Errores de Red
+        console.error("Error de red:", error);
+        notificationStore.addNotification(
+          "Sin Conexión", 
+          "El servidor no responde. Verifique su conexión o el estado del backend.", 
+          "error"
+        );
+      }
     },
+
     resetForm() {
       this.user = {
         firstName: "",
@@ -140,9 +155,9 @@ export default {
         password: "",
         role: "",
       };
-    },
-  },
-};
+    }
+  } // Cierre de methods
+}; // Cierre de export default
 </script>
 
 

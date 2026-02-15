@@ -13,6 +13,7 @@
     <div class="tasa">
       <h2>Tasa oficial BCV del día</h2>
       <p v-if="tasa">1 USD = {{ tasa }} VES</p>
+      <p v-else-if="errorTasa">Error al cargar tasa</p>
       <p v-else>Cargando tasa...</p>
     </div>
   </div>
@@ -21,22 +22,37 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import Sidebar from '../../components/Generic Components/SidebarAdmin.vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js';
 
 const tasa = ref(null)
+const errorTasa = ref(false)
+const notificationStore = useNotificationStore();
 
 onMounted(async () => {
   try {
-    const res = await fetch('https://ve.dolarapi.com/v1/dolares')
-    const data = await res.json()
-    const bcv = data.find(item => item.fuente === 'oficial')
-    tasa.value = bcv?.promedio?.toFixed(2)
+    const res = await fetch('http://localhost:8080/currency/exchange_rate')
+    
+    if (!res.ok) throw new Error('No se pudo conectar con el servidor local');
+
+    const dataText = await res.text()
+    tasa.value = dataText.trim() 
+
   } catch (error) {
-    console.error('Error al obtener la tasa BCV:', error)
+    console.error('Error al obtener la tasa:', error)
+    errorTasa.value = true
+    
+    // ❌ Notificación de error detallada
+    notificationStore.addNotification(
+      "Fallo de Comunicación", 
+      "No se pudo obtener la tasa oficial. Verifique que el servidor local (8080) esté activo.", 
+      "error"
+    );
   }
 })
 </script>
 
 <style scoped>
+/* Tu CSS se mantiene igual, es excelente */
 .barra-rol {
   margin-left: 260px;
   position: fixed;
@@ -54,7 +70,7 @@ onMounted(async () => {
 }
 
 .bienvenida-marco {
-  margin: 38px auto 32px auto; /* espacio para la barra fija */
+  margin: 80px auto 32px auto; /* Aumentado para que no choque con la barra fija */
   max-width: 600px;
   background-color: #fff7ed;
   border: 1px solid #fdba74;
@@ -91,7 +107,6 @@ h1 {
   margin-top: 16px;
 }
 </style>
-
 
 
 

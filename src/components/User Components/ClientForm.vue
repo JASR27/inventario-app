@@ -3,48 +3,49 @@
     <h2>Registrar Cliente</h2>
     <form @submit.prevent="handleSubmit">
       <div class="form-grid">
-        <!-- Nombre completo -->
         <div class="form-group">
           <label for="fullName">Nombre Completo:</label>
-          <input
-            type="text"
-            id="fullName"
-            v-model="client.fullName"
-            required
-            minlength="6"
-            maxlength="50"
-            pattern="[A-Za-z ]{6,50}"
-            title="Debe tener entre 6 y 50 caracteres. Solo se permiten letras y espacios"
-          />
+          <input type="text" id="fullName" v-model="client.fullName" required placeholder="Ej: Juan Pérez" />
         </div>
 
-        <!-- NID -->
         <div class="form-group">
-          <label for="nid">NID:</label>
-          <input
-            type="text"
-            id="nid"
-            v-model="client.nid"
-            required
-            minlength="6"
-            maxlength="20"
-            pattern="[A-Za-z0-9._-]{6,20}"
-            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_"
-          />
+          <label>Identificación (RIF):</label>
+          <div class="rif-composite-input">
+            <select v-model="rifParts.type" class="rif-select" @change="calcularDigitoVerificador">
+              <option value="V">V (Venezolano)</option>
+              <option value="E">E (Extranjero)</option>
+              <option value="P">P (Pasaporte)</option>
+              <option value="J">J (Jurídico)</option>
+              <option value="G">G (Gubernamental)</option>
+            </select>
+            
+            <span class="rif-separator">-</span>
+
+            <input 
+              type="text" 
+              :value="rifParts.number" 
+              @keydown="handleRifKeyDown"
+              placeholder="00000000" 
+              class="rif-input-body"
+            />
+
+            <span class="rif-separator">-</span>
+
+            <input 
+              type="text" 
+              :value="rifParts.verifier" 
+              readonly
+              placeholder="?" 
+              class="rif-input-verifier readonly-field"
+              title="Calculado automáticamente"
+            />
+          </div>
+          <small class="rif-helper">Escriba los números; se desplazarán de derecha a izquierda.</small>
         </div>
 
-        <!-- Dirección -->
         <div class="form-group">
           <label for="address">Dirección:</label>
-          <textarea
-            id="address"
-            v-model="client.address"
-            required
-            minlength="6"
-            maxlength="50"
-            pattern="[A-Za-z0-9 ._-]{6,50}"
-            title="Debe tener entre 6 y 50 caracteres. Solo se permiten letras, números, espacios y .-_"
-          ></textarea>
+          <input type="text" id="address" v-model="client.address" required placeholder="Ej: Av. Principal..."></input>
         </div>
       </div>
 
@@ -56,80 +57,103 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: "ClientForm",
-  data() {
-    return {
-      client: {
-        fullName: "",
-        nid: "",
-        address: "",
-      },
-    };
-  },
-  methods: {
-    handleSubmit() {
-      const nameRegex = /^[A-Za-z ]{6,50}$/;
-      const nidRegex = /^[A-Za-z0-9._-]{6,20}$/;
-      const addressRegex = /^[A-Za-z0-9 ._-]{6,50}$/;
+<script setup>
+import { ref, reactive } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 
-      if (!nameRegex.test(this.client.fullName)) {
-        alert(
-          "El nombre debe tener entre 6 y 50 caracteres y solo puede contener letras y espacios."
-        );
-        return;
-      }
+const notificationStore = useNotificationStore()
 
-      if (!nidRegex.test(this.client.nid)) {
-        alert(
-          "El NID debe tener entre 6 y 20 caracteres y solo puede contener letras, números y .-_"
-        );
-        return;
-      }
+const client = ref({ fullName: "", address: "" })
+const rifParts = reactive({
+  type: 'V',
+  number: '00000000', // Iniciamos con el formato lleno
+  verifier: ''
+})
 
-      if (!addressRegex.test(this.client.address)) {
-        alert(
-          "La dirección debe tener entre 6 y 50 caracteres y solo puede contener letras, números, espacios y .-_"
-        );
-        return;
-      }
+const letraValores = { V: 1, E: 2, J: 3, P: 4, G: 5 }
+const pesos = [4, 3, 2, 7, 6, 5, 4, 3, 2]
 
-      const payload = {
-        fullName: this.client.fullName,
-        nid: this.client.nid,
-        address: this.client.address,
-      };
+function calcularDigitoVerificador() {
+  const numStr = rifParts.number
+  const valorLetra = letraValores[rifParts.type]
+  const digitos = [valorLetra, ...numStr.split('').map(Number)]
+  
+  let sumaTotal = 0
+  for (let i = 0; i < 9; i++) {
+    sumaTotal += digitos[i] * pesos[i]
+  }
+  
+  const residuo = sumaTotal % 11
+  let resultado = 11 - residuo
+  
+  rifParts.verifier = (resultado >= 10) ? '0' : resultado.toString()
+}
 
-      fetch("http://localhost:8080/client", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+// Lógica ATM: Desplazamiento de derecha a izquierda
+function handleRifKeyDown(e) {
+  const isNumber = /^\d$/.test(e.key)
+  const isBackspace = e.key === 'Backspace'
+
+  // Bloqueamos la escritura nativa para procesarla manualmente
+  if (isNumber || isBackspace) {
+    e.preventDefault()
+  } else if (e.key !== 'Tab') {
+    return // Permitir Tab para navegación
+  }
+
+  let currentNumber = rifParts.number.replace(/\D/g, '')
+
+  if (isNumber) {
+    // Añade al final y mantiene los últimos 8
+    currentNumber = (currentNumber + e.key).slice(-8)
+  } else if (isBackspace) {
+    // Borra el último y rellena con un cero a la izquierda
+    currentNumber = currentNumber.slice(0, -1).padStart(8, '0')
+  }
+
+  rifParts.number = currentNumber
+  calcularDigitoVerificador()
+}
+
+async function handleSubmit() {
+  // Verificamos que no sea solo ceros antes de enviar
+  if (rifParts.number === '00000000' || !rifParts.verifier) {
+    return notificationStore.addNotification("Error", "Debe completar el número de identificación", "error")
+  }
+
+  const rifFinal = `${rifParts.type}-${rifParts.number}-${rifParts.verifier}`
+
+  try {
+    const response = await fetch("http://localhost:8080/client", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        fullName: client.value.fullName, 
+        nid: rifFinal, 
+        address: client.value.address 
       })
-        .then((response) => {
-          if (!response.ok) throw new Error("Error al registrar el cliente");
-          return response.json();
-        })
-        .then((data) => {
-          alert(`Cliente "${data.fullName}" registrado con éxito`);
-          this.resetForm();
-        })
-        .catch((error) => {
-          console.error("Error:", error);
-          alert("Hubo un problema al registrar el cliente.");
-        });
-    },
-    resetForm() {
-      this.client = {
-        fullName: "",
-        nid: "",
-        address: "",
-      };
-    },
-  },
-};
+    })
+
+    if (!response.ok) {
+      if (response.status === 409) {
+        return notificationStore.addNotification("Registro Duplicado", "Este cliente ya existe.", "warning")
+      }
+      throw new Error()
+    }
+
+    notificationStore.addNotification("Éxito", `Cliente registrado con RIF: ${rifFinal}`, "success")
+    resetForm()
+  } catch (error) {
+    notificationStore.addNotification("Error", "Hubo un problema con el servidor.", "error")
+  }
+}
+
+function resetForm() {
+  client.value = { fullName: "", address: "" }
+  rifParts.type = 'V'
+  rifParts.number = '00000000'
+  rifParts.verifier = ''
+}
 </script>
 
 <style scoped>
@@ -149,17 +173,16 @@ export default {
 }
 
 .client-form h2 {
-  margin-bottom: 1rem;
   font-size: 1.5rem;
   color: #166534;
   text-align: center;
+  margin-bottom: 0.5rem;
 }
 
-/* Campos en vertical */
 .form-grid {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .form-group {
@@ -171,24 +194,66 @@ export default {
   font-weight: 600;
   color: #065f46;
   margin-bottom: 0.5rem;
+  font-size: 0.9rem;
 }
 
-.client-form input,
+/* Input General */
+.client-form input[type="text"],
 .client-form textarea {
   padding: 0.75rem;
   border: 1px solid #a7f3d0;
   border-radius: 8px;
   font-size: 1rem;
   background-color: #fff;
-  color: #1e293b;
   transition: border-color 0.3s ease;
-  resize: vertical;
 }
 
-.client-form input:focus,
-.client-form textarea:focus {
-  outline: none;
+/* Contenedor RIF/Cédula */
+.rif-composite-input {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 0 0.75rem;
+}
+
+.rif-composite-input:focus-within {
   border-color: #34d399;
+}
+
+.rif-select {
+  border: none;
+  background: transparent;
+  padding: 0.75rem 0;
+  color: #065f46;
+  font-weight: 600;
+  font-family: "Inter", sans-serif;
+  outline: none;
+  cursor: pointer;
+}
+
+.rif-separator {
+  color: #a7f3d0;
+  font-weight: bold;
+  margin: 0 8px;
+}
+
+.rif-input-body, .rif-input-verifier {
+  border: none !important;
+  outline: none !important;
+  background: transparent;
+  padding: 0.75rem 0;
+}
+
+.rif-input-body { flex: 1; text-align: left; }
+.rif-input-verifier { width: 30px; text-align: center; font-weight: 600; }
+
+.rif-helper {
+  margin-top: 5px;
+  font-size: 0.75rem;
+  color: #166534;
+  font-style: italic;
 }
 
 .button-group {
@@ -207,22 +272,8 @@ button {
   font-family: "Inter", sans-serif;
 }
 
-button[type="submit"] {
-  background-color: #10b981;
-  color: white;
-}
+button[type="submit"] { background-color: #10b981; color: white; }
+button[type="button"] { background-color: #d1fae5; color: #065f46; }
 
-button[type="submit"]:hover {
-  background-color: #059669;
-}
-
-button[type="button"] {
-  background-color: #d1fae5;
-  color: #065f46;
-}
-
-button[type="button"]:hover {
-  background-color: #a7f3d0;
-}
-
+button:hover { opacity: 0.9; }
 </style>

@@ -6,15 +6,13 @@
         <div class="form-group">
           <label for="name">Nombre del Producto:</label>
           <input type="text" id="name" v-model="product.name" required minlength="6" maxlength="50"
-            pattern="[A-Za-z0-9._-]{6,50}"
-            title="Debe tener entre 6 y 50 caracteres. Solo se permiten letras, números y .-_" />
+            placeholder="Ej: Zapato Deportivo" />
         </div>
 
         <div class="form-group">
           <label for="description">Descripción:</label>
-          <textarea id="description" v-model="product.description" required minlength="6" maxlength="50"
-            pattern="[A-Za-z0-9._-]{6,50}"
-            title="Debe tener entre 6 y 50 caracteres. Solo se permiten letras, números y .-_"></textarea>
+          <input type="text" id="description" v-model="product.description" required minlength="6" maxlength="50"
+            placeholder="Breve descripción del producto..." />
         </div>
 
         <div class="form-group">
@@ -54,114 +52,105 @@
   </div>
 </template>
 
-<script>
-export default {
-  name: "ProductForm",
-  data() {
-    return {
-      product: {
-        name: "",
-        description: "",
-        buyingPrice: null,
-        sellingPrice: null,
-        brandId: "", // ID de la marca seleccionada
-      },
-      brands: [], // Lista de marcas obtenidas del backend
-    };
-  },
-  methods: {
-    handleSubmit() {
-      // Validaciones adicionales en JS
-      const textRegex = /^[A-Za-z0-9 ._-]{6,50}$/;
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 
-      if (
-        !textRegex.test(this.product.name) ||
-        !textRegex.test(this.product.description)
-      ) {
-        alert(
-          "El nombre y la descripción deben tener entre 6 y 50 caracteres y solo pueden contener letras, números y .-_"
-        );
-        return;
-      }
+const notificationStore = useNotificationStore()
 
-      if (
-        !this.product.buyingPrice ||
-        !this.product.sellingPrice ||
-        this.product.buyingPrice <= 0 ||
-        this.product.sellingPrice <= 0
-      ) {
-        alert("Los precios deben ser números positivos.");
-        return;
-      }
+const product = ref({
+  name: "",
+  description: "",
+  buyingPrice: null,
+  sellingPrice: null,
+  brandId: "",
+})
 
-      if (!this.product.brandId) {
-        alert("Debe seleccionar una marca.");
-        return;
-      }
+const brands = ref([])
 
-      const payload = {
-        name: this.product.name,
-        description: this.product.description,
-        buyingPrice: this.product.buyingPrice.toFixed(2),
-        sellingPrice: this.product.sellingPrice.toFixed(2),
-        brandId: this.product.brandId,
-      };
+const fetchBrands = async () => {
+  try {
+    const response = await fetch("http://localhost:8080/brand")
+    if (!response.ok) throw new Error()
+    const data = await response.json()
+    brands.value = Array.isArray(data) ? data : []
+  } catch (error) {
+    notificationStore.addNotification("Error", "No se pudieron cargar las marcas.", "error")
+  }
+}
 
-      fetch("http://localhost:8080/product", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("Error al registrar el producto");
-          return response.json();
-        })
-        .then((data) => {
-          alert(`Producto "${data.name}" registrado con éxito`);
-          this.resetForm();
-        })
-        .catch((error) => {
-          console.error("Error:", error);
-          alert("Hubo un problema al registrar el producto.");
-        });
-    },
-    resetForm() {
-      this.product = {
-        name: "",
-        description: "",
-        buyingPrice: null,
-        sellingPrice: null,
-        brandId: "",
-      };
-    },
-    fetchBrands() {
-      fetch("http://localhost:8080/brand")
-        .then((response) => {
-          if (!response.ok) throw new Error("Error al cargar marcas");
-          return response.json();
-        })
-        .then((data) => {
-          this.brands = Array.isArray(data) ? data : [];
-        })
-        .catch((error) => {
-          console.error("Error al obtener marcas:", error);
-        });
-    },
-  },
-  mounted() {
-    this.fetchBrands();
-  },
-};
+const handleSubmit = async () => {
+  const textRegex = /^[A-Za-z0-9 ._-]{6,50}$/
+
+  // 1. Validaciones de Texto
+  if (!textRegex.test(product.value.name) || !textRegex.test(product.value.description)) {
+    return notificationStore.addNotification(
+      "Formato Inválido",
+      "El nombre y descripción deben tener 6-50 caracteres (Letras, números, . - _)",
+      "warning"
+    )
+  }
+
+  // 2. Validación de Precios Positivos
+  if (product.value.buyingPrice <= 0 || product.value.sellingPrice <= 0) {
+    return notificationStore.addNotification("Error de Precio", "Los precios deben ser mayores a 0.", "warning")
+  }
+
+  // 3. Validación Lógica: Compra < Venta
+  if (product.value.buyingPrice >= product.value.sellingPrice) {
+    return notificationStore.addNotification(
+      "Margen de Ganancia",
+      "El precio de venta debe ser mayor al precio de adquisición.",
+      "error"
+    )
+  }
+
+  if (!product.value.brandId) {
+    return notificationStore.addNotification("Dato Faltante", "Seleccione una marca.", "warning")
+  }
+
+  const payload = {
+    ...product.value,
+    buyingPrice: product.value.buyingPrice.toFixed(2),
+    sellingPrice: product.value.sellingPrice.toFixed(2),
+  }
+
+  try {
+    const response = await fetch("http://localhost:8080/product", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) throw new Error()
+    
+    const data = await response.json()
+    notificationStore.addNotification("Éxito", `Producto "${data.name}" registrado correctamente.`, "success")
+    resetForm()
+  } catch (error) {
+    notificationStore.addNotification("Error", "Hubo un problema al registrar el producto.", "error")
+  }
+}
+
+const resetForm = () => {
+  product.value = {
+    name: "",
+    description: "",
+    buyingPrice: null,
+    sellingPrice: null,
+    brandId: "",
+  }
+}
+
+onMounted(fetchBrands)
 </script>
 
 <style scoped>
+/* Se mantienen tus estilos originales */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
 
 .product-form {
   background-color: #f0fdf4;
-  /* Fondo verde claro */
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -177,10 +166,8 @@ export default {
   margin-bottom: 1rem;
   font-size: 1.5rem;
   color: #166534;
-  /* Título verde oscuro */
 }
 
-/* Grid para campos en dos columnas */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -192,7 +179,6 @@ export default {
   flex-direction: column;
 }
 
-/* Estilos para inputs, textarea y select */
 .product-form label {
   font-weight: 600;
   color: #065f46;
@@ -219,7 +205,6 @@ export default {
   border-color: #34d399;
 }
 
-/* Estilo personalizado para select */
 .product-form select {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8L10 12L14 8' stroke='%23065f46' stroke-width='2'/%3E%3C/svg%3E");
@@ -228,7 +213,6 @@ export default {
   background-size: 1rem;
 }
 
-/* Botones alineados horizontalmente */
 .button-group {
   display: flex;
   justify-content: flex-end;
