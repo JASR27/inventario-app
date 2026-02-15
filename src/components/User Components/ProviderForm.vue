@@ -44,9 +44,7 @@
               class="rif-input-verifier readonly-field"
             />
           </div>
-          <small class="rif-helper">
-            Escriba los números; se desplazarán de derecha a izquierda automáticamente.
-          </small>
+          
         </div>
       </div>
 

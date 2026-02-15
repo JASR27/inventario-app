@@ -88,7 +88,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'; // Importación del store
 
+const notificationStore = useNotificationStore();
 const emit = defineEmits(['seleccionar', 'cerrar'])
 const props = defineProps({
   modo: { type: String, default: 'venta' },
@@ -101,7 +103,7 @@ const criterioOrden = ref('sku')
 const ordenAscendente = ref(true)
 const tasaCambio = ref(0)
 
-// Helper para generar SKU: 3 letras nombre (Mayus) + ID
+// Helper para generar SKU
 function generarSku(nombre, id) {
   if (!nombre) return `PRO-${id}`;
   const prefijo = nombre.substring(0, 3).toUpperCase();
@@ -116,16 +118,23 @@ function formatoBs(v) { return 'Bs ' + formatearNumero(v); }
 async function fetchTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
-    if (res.ok) tasaCambio.value = parseFloat(await res.text())
-  } catch (e) { console.error(e) }
+    if (res.ok) {
+      tasaCambio.value = parseFloat(await res.text())
+    } else {
+      notificationStore.addNotification("Aviso", "No se pudo obtener la tasa de cambio actual.", "info")
+    }
+  } catch (e) { 
+    console.error(e)
+  }
 }
 
 async function fetchProductos() {
   try {
     const response = await fetch('http://localhost:8080/product')
+    if (!response.ok) throw new Error("Error en servidor");
+    
     const data = await response.json()
     
-    // Procesamos los productos para inyectarles el SKU generado
     let listaProcesada = data.map(p => ({
       ...p,
       sku: generarSku(p.name, p.id)
@@ -140,11 +149,18 @@ async function fetchProductos() {
           return totalStock >= 1 ? p : null
         } catch { return null }
       })
-      productos.value = (await Promise.all(promesas)).filter(p => p !== null)
+      const filtrados = (await Promise.all(promesas)).filter(p => p !== null)
+      
+      if (filtrados.length === 0 && listaProcesada.length > 0) {
+        notificationStore.addNotification("Inventario", "No hay productos con stock disponible para la venta.", "info")
+      }
+      productos.value = filtrados
     } else {
       productos.value = listaProcesada
     }
-  } catch (e) { console.error(e) }
+  } catch (e) { 
+    notificationStore.addNotification("Error", "No se pudo conectar con el catálogo de productos.", "error")
+  }
 }
 
 const placeholderBusqueda = computed(() => {
@@ -193,8 +209,15 @@ const productosFiltradosYOrdenados = computed(() => {
   return filtrados
 })
 
-function seleccionar(p) { emit('seleccionar', p) }
-onMounted(() => { fetchTasa(); fetchProductos(); })
+function seleccionar(p) { 
+  notificationStore.addNotification("Seleccionado", `${p.name} añadido correctamente.`, "success")
+  emit('seleccionar', p) 
+}
+
+onMounted(() => { 
+  fetchTasa(); 
+  fetchProductos(); 
+})
 </script>
 
 <style scoped>

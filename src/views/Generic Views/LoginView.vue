@@ -14,11 +14,13 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useNotificationStore } from '../../store/useNotificationStore.js' // Ajusta la ruta según tu proyecto
 
 const usuario = ref('')
 const clave = ref('')
-const cargando = ref(false) // Estado para deshabilitar el botón mientras carga
+const cargando = ref(false)
 const router = useRouter()
+const notificationStore = useNotificationStore()
 
 function setCookie(nombre, valor, dias = 1) {
   const fecha = new Date()
@@ -27,6 +29,12 @@ function setCookie(nombre, valor, dias = 1) {
 }
 
 async function login() {
+  // Validación básica antes de disparar el fetch
+  if (!usuario.value || !clave.value) {
+    notificationStore.addNotification("Datos requeridos", "Por favor, ingrese usuario y contraseña.", "warning")
+    return
+  }
+
   cargando.value = true
 
   try {
@@ -42,10 +50,8 @@ async function login() {
     })
 
     if (respuesta.status === 200) {
-      // 1. Convertimos la respuesta de JSON a un objeto de JavaScript
       const data = await respuesta.json();
-
-      // 2. Extraemos el ID (y cualquier otro dato que necesites)
+      
       const userId = data.id;
       const userRole = data.role;
 
@@ -55,9 +61,8 @@ async function login() {
       setCookie('userid', userId)
       setCookie('username', usuario.value)
 
-      // Nota: Como el backend solo devuelve el ID, aquí podrías 
-      // decidir el rol basándote en el ID o hacer otra petición.
-      // Por ahora, simularemos que el ID "1" es el admin.
+      
+
       if (userRole === "ADMIN") {
         localStorage.setItem('rol', 'admin')
         router.push('/dashboard/admin')
@@ -67,13 +72,13 @@ async function login() {
       }
 
     } else if (respuesta.status === 409) {
-      alert('Credenciales incorrectas: El usuario no existe o la contraseña es errónea.')
+      notificationStore.addNotification("Acceso Denegado", "Usuario o contraseña incorrectos.", "error")
     } else {
-      alert('Error en el servidor. Inténtelo más tarde.')
+      notificationStore.addNotification("Error", "Error inesperado en el servidor.", "error")
     }
   } catch (error) {
     console.error('Error de conexión:', error)
-    alert('No se pudo conectar con el servidor. ¿Está encendido el backend?')
+    notificationStore.addNotification("Fallo de conexión", "No se pudo conectar con el servidor. Verifica tu red.", "error")
   } finally {
     cargando.value = false
   }
@@ -81,12 +86,12 @@ async function login() {
 </script>
 
 <style scoped>
-/* Mantengo tus estilos originales que están excelentes */
+/* Tus estilos se mantienen iguales */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
 .login-container {
   max-width: 320px;
-  margin: auto;
+  margin: 100px auto; /* Añadí un margen superior para centrarlo visualmente */
   padding: 2rem;
   background-color: #f0fdf4;
   color: #065f46;
@@ -125,6 +130,11 @@ input {
   transition: border-color 0.3s ease;
 }
 
+input:focus {
+  outline: none;
+  border-color: #34d399;
+}
+
 input:disabled {
   background-color: #e2e8f0;
   cursor: not-allowed;
@@ -141,6 +151,7 @@ button {
   transition: background-color 0.3s ease, transform 0.2s ease;
   background-color: #10b981;
   color: white;
+  width: 100%; /* El botón ahora ocupa todo el ancho disponible */
 }
 
 button:hover:not(:disabled) {

@@ -88,7 +88,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'; // Importación del store
 
+const notificationStore = useNotificationStore();
 const emit = defineEmits(['seleccionar', 'cerrar'])
 const props = defineProps({
   modo: { type: String, default: 'venta' },
@@ -115,8 +117,14 @@ function formatoBs(v) { return 'Bs ' + formatearNumero(v); }
 async function fetchTasa() {
   try {
     const res = await fetch('http://localhost:8080/currency/exchange_rate')
-    if (res.ok) tasaCambio.value = parseFloat(await res.text())
-  } catch (e) { console.error(e) }
+    if (res.ok) {
+      tasaCambio.value = parseFloat(await res.text())
+    } else {
+      notificationStore.addNotification("Aviso", "No se pudo sincronizar la tasa del dólar.", "info")
+    }
+  } catch (e) {
+    console.error(e)
+  }
 }
 
 async function fetchProductos() {
@@ -125,7 +133,6 @@ async function fetchProductos() {
     if (!response.ok) throw new Error('Error al cargar productos')
     const data = await response.json()
     
-    // Generamos el SKU para todos los productos recibidos
     const listaConSku = data.map(p => ({
       ...p,
       sku: generarSku(p.name, p.id)
@@ -141,11 +148,19 @@ async function fetchProductos() {
           return totalStock >= 1 ? p : null
         } catch { return null }
       })
-      productos.value = (await Promise.all(promesas)).filter(p => p !== null)
+      const filtrados = (await Promise.all(promesas)).filter(p => p !== null)
+      
+      if (filtrados.length === 0 && listaConSku.length > 0) {
+        notificationStore.addNotification("Inventario", "No hay productos disponibles con stock para vender.", "info")
+      }
+      productos.value = filtrados
     } else {
       productos.value = listaConSku
     }
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    notificationStore.addNotification("Error", "Error al conectar con el servidor de productos.", "error")
+    console.error(e)
+  }
 }
 
 const placeholderBusqueda = computed(() => {
@@ -169,6 +184,7 @@ const productosFiltradosYOrdenados = computed(() => {
     return matchSKU || matchN || matchD || matchB
   })
 
+  // Lógica de ordenación se mantiene igual...
   filtrados.sort((a, b) => {
     let vA, vB
     if (criterioOrden.value === 'price') {
@@ -176,25 +192,26 @@ const productosFiltradosYOrdenados = computed(() => {
       vB = props.modo === 'venta' ? (b.sellingPrice || 0) : (b.buyingPrice || 0)
       return ordenAscendente.value ? vA - vB : vB - vA
     }
-    
     vA = (p => {
       if (criterioOrden.value === 'sku') return p.sku || ''
       if (criterioOrden.value === 'brand') return p.brand?.name || ''
       return p.name || ''
     })(a).toLowerCase()
-    
     vB = (p => {
       if (criterioOrden.value === 'sku') return p.sku || ''
       if (criterioOrden.value === 'brand') return p.brand?.name || ''
       return p.name || ''
     })(b).toLowerCase()
-
     return ordenAscendente.value ? vA.localeCompare(vB) : vB.localeCompare(vA)
   })
   return filtrados
 })
 
-function seleccionar(p) { emit('seleccionar', p) }
+function seleccionar(p) { 
+  notificationStore.addNotification("Producto Añadido", `${p.name} se agregó a la lista.`, "success")
+  emit('seleccionar', p) 
+}
+
 onMounted(() => { fetchTasa(); fetchProductos(); })
 </script>
 

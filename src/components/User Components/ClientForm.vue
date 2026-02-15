@@ -40,7 +40,7 @@
               title="Calculado automáticamente"
             />
           </div>
-          <small class="rif-helper">Escriba los números; se desplazarán de derecha a izquierda.</small>
+          
         </div>
 
         <div class="form-group">

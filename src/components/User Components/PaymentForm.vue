@@ -7,15 +7,19 @@
         <label for="amount">Monto</label>
         <div class="input-with-label">
           <input 
+            ref="inputMonto"
             id="amount" 
-            type="number" 
-            v-model.number="amount" 
-            min="0.01" 
-            max="10000000" 
-            step="0.01"
+            type="text" 
+            :value="formattedAmount"
+            @input="handleInput"
+            @click="forceCursorToEnd"
+            @keyup="forceCursorToEnd"
+            placeholder="0,00"
+            inputmode="numeric"
           />
           <span class="currency-label">Bs.</span>
         </div>
+        
       </div>
 
       <div class="form-group">
@@ -36,40 +40,89 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, nextTick } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js';
 
-const amount = ref(0)
+const notificationStore = useNotificationStore();
+const rawAmount = ref(0)
 const method = ref('')
-
+const inputMonto = ref(null)
 const emit = defineEmits(['guardar', 'cerrar'])
 
+// --- LÓGICA DE MÁSCARA ATM ---
+
+const formattedAmount = computed(() => {
+  const number = rawAmount.value / 100;
+  return number.toLocaleString('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+});
+
+const forceCursorToEnd = () => {
+  if (inputMonto.value) {
+    const length = inputMonto.value.value.length;
+    inputMonto.value.setSelectionRange(length, length);
+  }
+};
+
+function handleInput(e) {
+  // 1. Extraer solo números
+  let val = e.target.value.replace(/\D/g, "");
+  
+  // 2. Quitar ceros a la izquierda para evitar errores de cálculo
+  val = val.replace(/^0+/, "");
+
+  // 3. Convertir a número para validar el tope
+  const numericValue = val ? parseInt(val) : 0;
+
+  // 4. BLOQUEO ESTRICTO: 
+  // Si el valor es mayor a 100.000.000.000 céntimos (1.000.000.000,00 Bs)
+  // No actualizamos el estado, manteniendo el valor anterior.
+  if (numericValue > 100000000000) {
+    // Opcional: Avisar al usuario que llegó al límite
+    return; 
+  }
+
+  // 5. Actualizar valor si pasó la validación
+  rawAmount.value = numericValue;
+
+  // 6. Forzar cursor al final
+  nextTick(() => {
+    forceCursorToEnd();
+  });
+}
+
+// --- ACCIONES ---
+
 function guardarPago() {
-  const errores = []
+  const finalAmount = rawAmount.value / 100;
 
-  if (isNaN(amount.value) || amount.value < 0.01 || amount.value > 10000000) {
-    errores.push('El monto debe estar entre 0.01 y 10,000,000.')
+  // Validación de Mínimo
+  if (finalAmount < 0.01) {
+    notificationStore.addNotification("Monto insuficiente", "El pago mínimo es 0,01 Bs.", "error");
+    return;
+  }
+  
+  // Validación de Máximo (Mil millones)
+  if (finalAmount > 1000000000) {
+    notificationStore.addNotification("Límite excedido", "El máximo permitido es 1.000.000.000 Bs.", "error");
+    return;
   }
 
-  if (!method.value.trim()) {
-    errores.push('Debe seleccionar un método (CASH o POS).')
+  if (!method.value) {
+    notificationStore.addNotification("Falta información", "Seleccione el método de pago.", "info");
+    return;
   }
 
-  if (errores.length > 0) {
-    alert(errores.join('\n'))
-    return
-  }
-
-  const nuevoPago = {
-    amount: parseFloat(amount.value),
-    method: method.value
-  }
-
-  emit('guardar', nuevoPago)
-  emit('cerrar')
+  emit('guardar', { amount: finalAmount, method: method.value });
+  notificationStore.addNotification("Pago Agregado", `Registrado: ${formattedAmount.value} Bs.`, "success");
+  emit('cerrar');
 }
 </script>
 
 <style scoped>
+/* Se mantienen tus estilos previos y añadimos estos retoques: */
 .modal-panel {
   background-color: #f0fdf4;
   padding: 2rem;
@@ -83,6 +136,21 @@ function guardarPago() {
   flex-direction: column;
   gap: 1.5rem;
 }
+
+input {
+  text-align: right; /* Alineación a la derecha para estilo contable */
+  font-family: 'Courier New', Courier, monospace; /* Opcional: fuente monoespaciada para números */
+  font-weight: bold;
+}
+
+.limit-hint {
+  font-size: 0.7rem;
+  color: #065f46;
+  opacity: 0.7;
+  margin-top: 4px;
+  text-align: right;
+}
+
 
 h2 {
   font-size: 1.5rem;

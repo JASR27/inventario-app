@@ -71,7 +71,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'; // Importación del store
 
+const notificationStore = useNotificationStore();
 const emit = defineEmits(['seleccionar', 'cerrar'])
 
 // --- ESTADOS ---
@@ -86,10 +88,18 @@ onMounted(async () => {
   try {
     const response = await fetch('http://localhost:8080/client')
     if (!response.ok) throw new Error('Error al obtener clientes')
+    
     const data = await response.json()
-    // Aseguramos que la data sea un array
-    clientes.value = Array.isArray(data) ? data : []
+    const listaFinal = Array.isArray(data) ? data : []
+    
+    clientes.value = listaFinal
+
+    // Notificar si la base de datos está vacía
+    if (listaFinal.length === 0) {
+      notificationStore.addNotification("Información", "No hay clientes registrados en el sistema.", "info")
+    }
   } catch (error) {
+    notificationStore.addNotification("Error", "No se pudo cargar la lista de clientes.", "error")
     console.error('Error cargando clientes:', error)
   }
 })
@@ -129,7 +139,6 @@ const clientesFiltrados = computed(() => {
     const valA = (a[criterioOrden.value] || '').toString().toLowerCase()
     const valB = (b[criterioOrden.value] || '').toString().toLowerCase()
     
-    // Usamos localeCompare para un ordenamiento alfabético correcto (acentos, ñ, etc)
     const res = valA.localeCompare(valB, 'es', { sensitivity: 'base' })
     return ordenAscendente.value ? res : -res
   })
@@ -139,8 +148,12 @@ const clientesFiltrados = computed(() => {
 
 // --- ACCIONES ---
 function seleccionar(cliente) {
+  notificationStore.addNotification(
+    "Cliente Seleccionado", 
+    `${cliente.fullName} se ha vinculado a la operación.`, 
+    "success"
+  )
   emit('seleccionar', cliente)
-  // Opcional: emit('cerrar') si quieres que se cierre al elegir
 }
 </script>
 

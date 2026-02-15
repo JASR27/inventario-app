@@ -5,40 +5,59 @@
       <div class="form-grid">
         <div class="form-group">
           <label for="firstName">Primer Nombre:</label>
-          <input type="text" id="firstName" v-model="user.firstName" required minlength="4" maxlength="20"
-            pattern="[A-Za-z ]{4,20}" title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios" />
+          <input type="text" id="firstName" v-model="user.firstName" required placeholder="Ej: Juan" />
         </div>
 
         <div class="form-group">
           <label for="lastName">Primer Apellido:</label>
-          <input type="text" id="lastName" v-model="user.lastName" required minlength="4" maxlength="20"
-            pattern="[A-Za-z ]{4,20}" title="Debe tener entre 4 y 20 caracteres. Solo se permiten letras y espacios" />
+          <input type="text" id="lastName" v-model="user.lastName" required placeholder="Ej: Pérez" />
         </div>
 
         <div class="form-group">
-          <label for="nid">NID:</label>
-          <input type="text" id="nid" v-model="user.nid" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9\-._]{6,20}"
-            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
+          <label>Identificación (NID):</label>
+          <div class="nid-composite-input">
+            <select v-model="nidParts.type" class="nid-select" @change="calcularDigitoVerificador">
+              <option v-for="letra in ['V', 'E', 'P']" :key="letra" :value="letra">
+                {{ letra }}
+              </option>
+            </select>
+            
+            <span class="nid-separator">-</span>
+
+            <input 
+              type="text" 
+              :value="nidParts.number" 
+              @keydown="handleNidKeyDown"
+              placeholder="00000000" 
+              class="nid-input-body"
+            />
+
+            <span class="nid-separator">-</span>
+
+            <input 
+              type="text" 
+              :value="nidParts.verifier" 
+              readonly
+              placeholder="?" 
+              class="nid-input-verifier readonly-field"
+            />
+          </div>
+          
         </div>
 
         <div class="form-group">
           <label for="username">Usuario:</label>
-          <input type="text" id="username" v-model="user.username" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9\-._]{6,20}"
-            title="Debe tener entre 6 y 20 caracteres. Solo se permiten letras, números y .-_" />
+          <input type="text" id="username" v-model="user.username" required placeholder="juan.perez" />
         </div>
 
         <div class="form-group">
           <label for="password">Contraseña:</label>
-          <input type="password" id="password" v-model="user.password" required minlength="6" maxlength="20"
-            pattern="[A-Za-z0-9\-._#$&*@]{6,20}"
-            title="Debe tener entre 6 y 20 caracteres. Se permiten letras, números y .-_ $#&*@" />
+          <input type="password" id="password" v-model="user.password" required placeholder="********" />
         </div>
 
         <div class="form-group">
           <label for="role">Rol:</label>
-          <select id="role" v-model="user.role" required>
+          <select id="role" v-model="user.role" required class="full-select">
             <option value="" disabled>Selecciona un rol</option>
             <option value="admin">Admin</option>
             <option value="user">User</option>
@@ -47,127 +66,120 @@
       </div>
 
       <div class="button-group">
-        <button type="button" @click="resetForm">Limpiar</button>
-        <button type="submit">Registrar</button>
+        <button type="button" class="btn-limpiar" @click="resetForm">Limpiar</button>
+        <button type="submit" class="btn-registrar">Registrar</button>
       </div>
     </form>
   </div>
 </template>
 
-<script>
-import { useNotificationStore } from '../../store/useNotificationStore.js';
+<script setup>
+import { ref, reactive } from 'vue'
+import { useNotificationStore } from '../../store/useNotificationStore.js'
 
-export default {
-  name: "UserForm",
-  data() {
-    return {
-      user: {
-        firstName: "",
-        lastName: "",
-        nid: "",
-        username: "",
-        password: "",
-        role: "",
-      },
-    };
-  },
-  methods: {
-    async handleSubmit() {
-      const notificationStore = useNotificationStore();
+const notificationStore = useNotificationStore()
 
-      // Regex de validación (Mismos criterios que el Backend)
-      const nameRegex = /^[A-Za-z ]{4,20}$/;
-      const nidRegex = /^[A-Za-z0-9._-]{6,20}$/; // Ajustado a min 6 como tus inputs
-      const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/;
-      const passwordRegex = /^[A-Za-z0-9._\-#$&*@]{6,20}$/;
+const user = ref({
+  firstName: "",
+  lastName: "",
+  username: "",
+  password: "",
+  role: "",
+})
 
-      // --- Validaciones de Frontend ---
-      if (!nameRegex.test(this.user.firstName)) {
-        notificationStore.addNotification("Dato Inválido", "El nombre debe tener entre 4 y 20 caracteres.", "warning");
-        return;
-      }
-      if (!nameRegex.test(this.user.lastName)) {
-        notificationStore.addNotification("Dato Inválido", "El apellido debe tener entre 4 y 20 caracteres.", "warning");
-        return;
-      }
-      if (!nidRegex.test(this.user.nid)) {
-        notificationStore.addNotification("Error de Formato", "El NID debe tener entre 6 y 20 caracteres.", "warning");
-        return;
-      }
-      if (!this.user.role) {
-        notificationStore.addNotification("Campo Requerido", "Por favor, selecciona un rol.", "warning");
-        return;
-      }
+const nidParts = reactive({
+  type: 'V',
+  number: '00000000',
+  verifier: ''
+})
 
-      // Preparación de datos
-      const payload = {
-        ...this.user,
-        role: this.user.role.toUpperCase(),
-      };
+const letraValores = { V: 1, E: 2, J: 3, P: 4, G: 5 }
+const pesos = [4, 3, 2, 7, 6, 5, 4, 3, 2]
 
-      // --- Envío al Backend ---
-      try {
-        const response = await fetch("http://localhost:8080/employee", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+function calcularDigitoVerificador() {
+  const numStr = nidParts.number
+  const valorLetra = letraValores[nidParts.type]
+  const digitos = [valorLetra, ...numStr.split('').map(Number)]
+  
+  let sumaTotal = 0
+  for (let i = 0; i < 9; i++) {
+    sumaTotal += digitos[i] * pesos[i]
+  }
+  
+  const residuo = sumaTotal % 11
+  let resultado = 11 - residuo
+  nidParts.verifier = (resultado >= 10) ? '0' : resultado.toString()
+}
 
-        // Manejo de Errores del Servidor (409 Conflict, etc)
-        if (!response.ok) {
-          const errorMessage = await response.text(); 
-          
-          if (response.status === 409) {
-            // El mensaje viene directamente de tu EmployeeService de Spring Boot
-            notificationStore.addNotification("Conflicto de Datos", errorMessage, "error");
-          } else {
-            notificationStore.addNotification("Error de Sistema", "No se pudo procesar el registro.", "error");
-          }
-          return; // Detenemos aquí
-        }
+function handleNidKeyDown(e) {
+  const isNumber = /^\d$/.test(e.key)
+  const isBackspace = e.key === 'Backspace'
 
-        // ✅ Registro Exitoso
-        const data = await response.json();
-        notificationStore.addNotification(
-          "Registro Exitoso", 
-          `El usuario "${data.username}" ha sido creado correctamente.`, 
-          "success"
-        );
-        this.resetForm();
+  e.preventDefault()
 
-      } catch (error) {
-        // Manejo de Errores de Red
-        console.error("Error de red:", error);
-        notificationStore.addNotification(
-          "Sin Conexión", 
-          "El servidor no responde. Verifique su conexión o el estado del backend.", 
-          "error"
-        );
-      }
-    },
+  let currentNumber = nidParts.number.replace(/\D/g, '')
 
-    resetForm() {
-      this.user = {
-        firstName: "",
-        lastName: "",
-        nid: "",
-        username: "",
-        password: "",
-        role: "",
-      };
+  if (isNumber) {
+    currentNumber = (currentNumber + e.key).slice(-8)
+  } else if (isBackspace) {
+    currentNumber = currentNumber.slice(0, -1).padStart(8, '0')
+  }
+
+  nidParts.number = currentNumber
+  calcularDigitoVerificador()
+}
+
+async function handleSubmit() {
+  // Validaciones de Regex (Front-end)
+  const nameRegex = /^[A-Za-z ]{4,20}$/
+  const usernameRegex = /^[A-Za-z0-9._-]{6,20}$/
+
+  if (!nameRegex.test(user.value.firstName) || !nameRegex.test(user.value.lastName)) {
+    return notificationStore.addNotification("Dato Inválido", "Nombre/Apellido deben tener entre 4 y 20 letras.", "warning")
+  }
+
+  const nidFinal = `${nidParts.type}-${nidParts.number}-${nidParts.verifier}`
+
+  const payload = {
+    ...user.value,
+    nid: nidFinal,
+    role: user.value.role.toUpperCase()
+  }
+
+  try {
+    const response = await fetch("http://localhost:8080/employee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      const errorMsg = await response.text()
+      if (response.status === 409) return notificationStore.addNotification("Conflicto", errorMsg, "warning")
+      throw new Error()
     }
-  } // Cierre de methods
-}; // Cierre de export default
+    
+    notificationStore.addNotification("Éxito", `Usuario ${user.value.username} registrado.`, "success")
+    resetForm()
+  } catch (error) {
+    notificationStore.addNotification("Error", "Fallo al conectar con el servidor.", "error")
+  }
+}
+
+function resetForm() {
+  user.value = { firstName: "", lastName: "", username: "", password: "", role: "" }
+  nidParts.type = 'V'
+  nidParts.number = '00000000'
+  nidParts.verifier = ''
+  notificationStore.addNotification("Formulario Limpio", "Los datos han sido reiniciados.", "info")
+}
 </script>
-
-
 
 <style scoped>
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap");
 
 .user-form {
-  background-color: #fff7ed;
-  /* Naranja claro */
+  background-color: #fff7ed; /* Naranja muy claro */
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -180,13 +192,12 @@ export default {
 }
 
 .user-form h2 {
-  margin-bottom: 1rem;
   font-size: 1.5rem;
-  color: #7c2d12;
-  /* Naranja oscuro */
+  color: #7c2d12; /* Marrón/Naranja oscuro */
+  text-align: center;
+  margin-bottom: 0.5rem;
 }
 
-/* Grid para campos en dos columnas */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -198,40 +209,81 @@ export default {
   flex-direction: column;
 }
 
-/* Estilos para inputs y select */
 .user-form label {
   font-weight: 600;
   color: #9a3412;
   margin-bottom: 0.5rem;
+  font-size: 0.9rem;
 }
 
-.user-form input,
-.user-form select {
+/* Inputs y Selects */
+.user-form input, .user-form select.full-select {
   padding: 0.75rem;
   border: 1px solid #fdba74;
   border-radius: 8px;
   font-size: 1rem;
   background-color: #fff;
-  color: #3b2f2f;
   transition: border-color 0.3s ease;
 }
 
-.user-form input:focus,
-.user-form select:focus {
+.user-form input:focus, .user-form select:focus {
   outline: none;
   border-color: #fb923c;
 }
 
-/* Estilo personalizado para select */
-.user-form select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8L10 12L14 8' stroke='%239a3412' stroke-width='2'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem;
+/* Estructura NID Unificada (Copia de la estética de Proveedor) */
+.nid-composite-input {
+  display: flex;
+  align-items: center;
+  background-color: #fff;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  padding: 0 0.75rem;
 }
 
-/* Botones alineados horizontalmente */
+.nid-composite-input:focus-within {
+  border-color: #fb923c;
+}
+
+.nid-select {
+  border: none;
+  background: transparent;
+  padding: 0.75rem 0;
+  color: #9a3412;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.nid-separator {
+  color: #fdba74;
+  font-weight: bold;
+  margin: 0 8px;
+}
+
+.nid-input-body, .nid-input-verifier {
+  border: none !important;
+  outline: none !important;
+  background: transparent;
+  padding: 0.75rem 0;
+}
+
+.nid-input-body { flex: 1; }
+
+.nid-input-verifier.readonly-field {
+  width: 30px;
+  text-align: center;
+  font-weight: 700;
+  color: #595959;
+}
+
+.nid-helper {
+  margin-top: 5px;
+  font-size: 0.75rem;
+  color: #c2410c;
+  font-style: italic;
+}
+
 .button-group {
   display: flex;
   justify-content: flex-end;
@@ -245,24 +297,17 @@ button {
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  font-family: "Inter", sans-serif;
+  transition: opacity 0.2s;
 }
 
-button[type="submit"] {
-  background-color: #f97316;
-  color: white;
-}
+.btn-registrar { background-color: #f97316; color: white; }
+.btn-limpiar { background-color: #fcd34d;
+  color: #78350f; }
 
-button[type="submit"]:hover {
-  background-color: #ea580c;
-}
+button:hover { opacity: 0.9; }
 
-button[type="button"] {
-  background-color: #fcd34d;
-  color: #78350f;
-}
-
-button[type="button"]:hover {
-  background-color: #fbbf24;
+/* Responsive */
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
 }
 </style>
